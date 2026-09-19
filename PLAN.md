@@ -69,7 +69,7 @@ Two toolchain notes: TypeScript is pinned to 5.x because no released typescript-
 yet, and `eslint-config-prettier` is absent on purpose — measured against this config it disables
 358 rules, none of which we enable.
 
-### 2. Simulation core — Solo
+### 2. Simulation core — Solo — done
 
 Typed arrays, uniform spatial hash, separation / alignment / cohesion, field-of- view angle,
 turn-rate limit, weak pull toward the origin.
@@ -84,6 +84,37 @@ turn-rate limit, weak pull toward the origin.
 Correctness only. Whether it _looks_ like a flock is step 7a. Keeping these separate matters — a
 neighbour-lookup bug does not crash, it just makes the flock mushy, and we would waste 7a tuning our
 way around a bug.
+
+Done. `src/sim/flock.ts` is the backend, `src/sim/spatial-hash.ts` the neighbour index, and
+`src/app.ts` the orchestrator that assembles canvas, GL, camera, simulation and feed and runs the
+frame loop. Nothing draws yet.
+
+Step 1's contract was rewritten in the process. It required a GL context because a GPU backend must
+not be forced to read its results back off the GPU merely to satisfy the interface — a real concern,
+but one that was conflated with the simulation _owning_ GL. Split in two, both properties hold:
+`Simulation` is pure and testable in node, and `BoidFeed` in `render/` carries per-boid data to the
+GPU. A GPU backend implements both, and its `sync` does nothing. Upload cadence became the
+orchestrator's business, which is what it always was: once per frame, not once per 120 Hz step.
+
+Three parameters were added because the step needed them. `maxForce` caps the summed steering of the
+three rules, which is what turns the weights into a ratio instead of three unbounded gains and is
+worth more to 7a than anything else here. `wanderStrength`/`wanderRate` keep a settled flock from
+crystallising. `spawnRadius` sizes the seeded starting disc. Field of view applies to alignment and
+cohesion only — separation stays omnidirectional, since a blind spot in the rule that prevents
+collisions reads as a bug. Origin pull is a linear spring, so boundedness is guaranteed rather than
+hoped for; a test runs the flock for four minutes at extreme settings and checks its reach settles
+instead of creeping.
+
+Raising `count` live spawns the new boids beside boids already flying, so the slider in 4b thickens
+the flock you are watching rather than firing a clump in from the spawn disc.
+
+One performance note, and it is a caveat rather than a result. Neighbour search is the whole cost:
+the 3x3 cell walk is done once per _cell_ and shared by the boids in it, which is worth about 20%,
+and after it the profile is 98% the neighbour loop, with the hash rebuild free at 0.06 ms. Absolute
+numbers are not available here — the sandbox benchmarks roughly 15x slower than native hardware on a
+calibration loop, so nothing measured in it says whether 5,000 boids hold 60fps. The HUD in 4b
+answers that, on a real machine. The relevant lever, if it turns out to be needed, is that cost
+scales with the square of `neighbourRadius`.
 
 ### 3. The grid — Collaborate (labels: Review)
 

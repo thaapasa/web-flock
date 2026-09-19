@@ -19,12 +19,27 @@ export interface SimParams {
   /**
    * Half-angle of the forward field of view, in radians. Neighbours outside it
    * are ignored, which is what stops the flock collapsing into a uniform ball.
+   *
+   * Applies to alignment and cohesion only. Separation stays omnidirectional:
+   * you feel a crowd pressing on you from behind whether or not you can see it,
+   * and a blind spot in the rule that prevents collisions reads as a bug.
    */
   fieldOfView: number;
 
   separationWeight: number;
   alignmentWeight: number;
   cohesionWeight: number;
+  /**
+   * Cap on the combined steering acceleration of the three rules above, in
+   * world units per second squared.
+   *
+   * It is what makes the three weights a *ratio* rather than three unbounded
+   * numbers. Without it, raising one weight both changes the balance between
+   * the rules and makes every boid snap harder, so no slider does one legible
+   * thing. External forces — origin pull, cursor, wander — are added after this
+   * cap, so the cursor can always overpower flocking.
+   */
+  maxForce: number;
 
   /** Weak pull toward the origin, so the flock migrates but never escapes. */
   originPull: number;
@@ -34,10 +49,23 @@ export interface SimParams {
   /** Radians per second. Caps how sharply a boid can turn. */
   maxTurnRate: number;
 
+  /**
+   * Steering jitter, world units per second squared. Keeps a flock that has
+   * found equilibrium from freezing into a lattice. Drawn from a per-boid
+   * stream, so it is jitter rather than a shared nudge, and it is still exactly
+   * reproducible from the seed.
+   */
+  wanderStrength: number;
+  /** How fast a boid's wander direction drifts, in radians per second. */
+  wanderRate: number;
+
   /** Cursor force: positive attracts, negative repels. */
   cursorStrength: number;
   /** World units. Outside this radius the cursor has no effect. */
   cursorRadius: number;
+
+  /** Radius of the disc the seeded starting flock is scattered over. */
+  spawnRadius: number;
 }
 
 /**
@@ -54,6 +82,7 @@ export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   separationWeight: 1.5,
   alignmentWeight: 1,
   cohesionWeight: 0.8,
+  maxForce: 120,
 
   originPull: 0.02,
 
@@ -61,6 +90,11 @@ export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   maxSpeed: 60,
   maxTurnRate: Math.PI * 1.5,
 
-  cursorStrength: -6,
+  wanderStrength: 8,
+  wanderRate: 2,
+
+  cursorStrength: -500,
   cursorRadius: 90,
+
+  spawnRadius: 400,
 });
