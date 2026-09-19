@@ -13,3 +13,13 @@ allow = [
     "registry.yarnpkg.com",
     "repo.yarnpkg.com"
 ]
+
+# node_modules and the Yarn cache live on the VM's ext4 disk, not on the
+# VirtioFS project mount. The host is macOS and the sandbox is Linux, so the
+# two must never share installed native binaries.
+# These also survive a change of OCI image.
+[disk.cache.node-modules]
+paths = ["node_modules"]
+
+[disk.cache.yarn]
+paths = ["~/.yarn/berry/cache", "~/.cache/node/corepack"]
