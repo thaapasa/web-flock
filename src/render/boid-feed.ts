@@ -34,15 +34,16 @@ export interface VertexAttributeSource {
  * in every one of them. Valid after {@link BoidFeed.sync}; the renderer must
  * not write to them.
  *
- * Trails are deliberately absent. Whether a trail is a ring buffer of past
- * positions or a quad stretched along the velocity is decided in step 4a, and
- * either way it is built on top of this: a history can be accumulated by
- * copying `position` into a ring of buffers with `copyBufferSubData`, which
- * costs the same whichever backend filled it.
+ * Trails are not here, and step 4a is the reason they never will be: the trail
+ * the flock kept is a ribbon through where each boid has *been*, which is a
+ * history rather than a per-boid value and lives in `trail-history.ts`. A feed
+ * says what a boid is now.
  */
 export interface BoidFeed {
   readonly position: VertexAttributeSource;
   readonly velocity: VertexAttributeSource;
+  /** Neighbour count per boid; see `Simulation.densities`. One float each. */
+  readonly density: VertexAttributeSource;
   /** Instances to draw. Valid after {@link sync}. */
   readonly count: number;
   /**
@@ -57,13 +58,14 @@ export interface BoidFeed {
 
 /** A feed for a backend that produces CPU-side arrays: upload them. */
 export function createUploadFeed(gl: WebGL2RenderingContext, simulation: Simulation): BoidFeed {
-  const bytes = simulation.capacity * 2 * Float32Array.BYTES_PER_ELEMENT;
-  const positionBuffer = createBuffer(gl, gl.ARRAY_BUFFER, bytes, gl.DYNAMIC_DRAW);
-  const velocityBuffer = createBuffer(gl, gl.ARRAY_BUFFER, bytes, gl.DYNAMIC_DRAW);
+  const bytes = simulation.capacity * Float32Array.BYTES_PER_ELEMENT;
+  const positionBuffer = createBuffer(gl, gl.ARRAY_BUFFER, bytes * 2, gl.DYNAMIC_DRAW);
+  const velocityBuffer = createBuffer(gl, gl.ARRAY_BUFFER, bytes * 2, gl.DYNAMIC_DRAW);
+  const densityBuffer = createBuffer(gl, gl.ARRAY_BUFFER, bytes, gl.DYNAMIC_DRAW);
 
-  const attribute = (buffer: WebGLBuffer): VertexAttributeSource => ({
+  const attribute = (buffer: WebGLBuffer, size: 1 | 2): VertexAttributeSource => ({
     buffer,
-    size: 2,
+    size,
     type: gl.FLOAT,
     stride: 0,
     offset: 0,
@@ -73,8 +75,9 @@ export function createUploadFeed(gl: WebGL2RenderingContext, simulation: Simulat
   let count = 0;
 
   return {
-    position: attribute(positionBuffer),
-    velocity: attribute(velocityBuffer),
+    position: attribute(positionBuffer, 2),
+    velocity: attribute(velocityBuffer, 2),
+    density: attribute(densityBuffer, 1),
 
     get count() {
       return count;
@@ -90,12 +93,15 @@ export function createUploadFeed(gl: WebGL2RenderingContext, simulation: Simulat
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, simulation.positions, 0, elements);
       gl.bindBuffer(gl.ARRAY_BUFFER, velocityBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, simulation.velocities, 0, elements);
+      gl.bindBuffer(gl.ARRAY_BUFFER, densityBuffer);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, simulation.densities, 0, count);
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
     },
 
     dispose(): void {
       gl.deleteBuffer(positionBuffer);
       gl.deleteBuffer(velocityBuffer);
+      gl.deleteBuffer(densityBuffer);
     },
   };
 }

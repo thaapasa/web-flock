@@ -261,6 +261,104 @@ describe('flock', () => {
     expect(matchIndex).toBeGreaterThan(400);
   });
 
+  /**
+   * The colour input added in 4a. Checked against brute force because the
+   * spatial hash is what produces it, and a neighbour-lookup bug does not
+   * crash — it just tints the flock slightly wrong, which is exactly the kind
+   * of thing step 7a would waste an afternoon tuning around.
+   */
+  it('counts every neighbour within the radius, and none outside it', () => {
+    const params = { ...DEFAULT_SIM_PARAMS, count: 300, neighbourRadius: 18 };
+    const simulation = makeFlock(params);
+    run(simulation, 200);
+
+    // Against the positions the counting pass saw, not the ones the
+    // integration pass then wrote: a density describes the neighbourhood the
+    // step was computed from. See `Simulation.densities`.
+    const seen = Float32Array.from(simulation.positions);
+    simulation.step(DT, NO_CURSOR);
+
+    const radius2 = params.neighbourRadius ** 2;
+    for (let i = 0; i < simulation.count; i++) {
+      let expected = 0;
+      for (let j = 0; j < simulation.count; j++) {
+        if (j === i) continue;
+        const dx = seen[j * 2] - seen[i * 2];
+        const dy = seen[j * 2 + 1] - seen[i * 2 + 1];
+        const distance2 = dx * dx + dy * dy;
+        if (distance2 > 0 && distance2 <= radius2) expected++;
+      }
+      expect(simulation.densities[i]).toBe(expected);
+    }
+  });
+
+  /**
+   * Omnidirectional on purpose: a field-of-view filter here would make a
+   * boid's colour change as it turned, which reads as flicker rather than as
+   * information. See `Simulation.densities`.
+   */
+  it('counts neighbours behind a boid as well as ahead of it', () => {
+    const narrow = makeFlock({ count: 300, fieldOfView: 0.2 });
+    const wide = makeFlock({ count: 300, fieldOfView: Math.PI });
+    // One step from an identical seeded start: the flocks have not diverged
+    // yet, so any difference in the counts is the field of view leaking in.
+    narrow.step(DT, NO_CURSOR);
+    wide.step(DT, NO_CURSOR);
+    expect(Array.from(narrow.densities)).toEqual(Array.from(wide.densities));
+  });
+
+  /**
+   * The reason the ramps hold fractions rather than world values. Crowding
+   * scales with how many boids there are, so a band fixed for five hundred is
+   * pinned at the top for five thousand — and a pinned ramp does not look
+   * stale, it looks like every boid is the same colour.
+   */
+  it('grows its density band as the flock thickens', () => {
+    const bandFor = (count: number): number => {
+      const simulation = makeFlock({ count });
+      run(simulation, 1200);
+      return simulation.ranges.maxDensity;
+    };
+
+    const small = bandFor(300);
+    const large = bandFor(1500);
+    expect(small).toBeGreaterThan(1);
+    expect(large).toBeGreaterThan(small * 1.5);
+  });
+
+  it('reports the speed bounds it is actually holding the flock to', () => {
+    const simulation = makeFlock({ minSpeed: 30, maxSpeed: 90 });
+    run(simulation, 60);
+    expect(simulation.ranges.minSpeed).toBe(30);
+    expect(simulation.ranges.maxSpeed).toBe(90);
+
+    // Live, like every other parameter: no restart.
+    simulation.setParams({ ...DEFAULT_SIM_PARAMS, minSpeed: 5, maxSpeed: 15 });
+    run(simulation, 1);
+    expect(simulation.ranges.minSpeed).toBe(5);
+    expect(simulation.ranges.maxSpeed).toBe(15);
+  });
+
+  /**
+   * A band is the divisor of a colour. If it tracked its estimate exactly it
+   * would twitch every step and shimmer the whole flock between hues while
+   * nothing about the flock had changed.
+   */
+  it('moves its density band smoothly rather than in jumps', () => {
+    const simulation = makeFlock({ count: 800 });
+    run(simulation, 600);
+
+    let previous = simulation.ranges.maxDensity;
+    let worst = 0;
+    for (let step = 0; step < 600; step++) {
+      simulation.step(DT, NO_CURSOR);
+      worst = Math.max(worst, Math.abs(simulation.ranges.maxDensity - previous));
+      previous = simulation.ranges.maxDensity;
+    }
+    // Well under a whole neighbour per step, at 120 steps a second.
+    expect(worst).toBeLessThan(0.25);
+  });
+
   it('bumps its revision when the boids move', () => {
     const simulation = makeFlock();
     const before = simulation.revision;

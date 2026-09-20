@@ -1,15 +1,21 @@
 import { Camera } from './camera/camera';
+import { createBoidControls } from './dev/boid-controls';
 import { createGridControls } from './dev/grid-controls';
+import { createPoseTrack } from './dev/pose-track';
 import type { Vec2 } from './math/types';
 import type { BoidFeed } from './render/boid-feed';
 import { createUploadFeed } from './render/boid-feed';
+import type { BoidTarget } from './render/boids';
+import { createBoidRenderer } from './render/boids';
 import { createResizingCanvas } from './render/canvas';
 import { createFrameStats } from './render/frame-stats';
+import type { ViewportRect } from './render/gl';
 import { getContext } from './render/gl';
-import type { ViewportRect } from './render/grid';
 import { createGridRenderer } from './render/grid';
 import type { OverlayOptions } from './render/overlay';
 import { createOverlay, DEFAULT_OVERLAY_OPTIONS } from './render/overlay';
+import type { TrailHistory } from './render/trail-history';
+import { createUploadTrailHistory } from './render/trail-history';
 import { createFlock } from './sim/flock';
 import type { SimParams } from './sim/params';
 import { DEFAULT_SIM_PARAMS } from './sim/params';
@@ -24,8 +30,8 @@ import type { SimInput, Simulation } from './sim/simulation';
  * Everything it assembles is independently testable because none of them refer
  * to each other.
  *
- * Steps 4 to 6 plug in here — boid renderer, controls, camera behaviour — which
- * is why the wiring is a module rather than the body of `main`.
+ * Steps 5 and 6 plug in here — controls, camera behaviour — which is why the
+ * wiring is a module rather than the body of `main`.
  */
 
 /** Seconds per simulation step. 120 Hz, so a 60 fps frame is two steps. */
@@ -54,6 +60,16 @@ const MAX_FRAME_TIME = 0.25;
  */
 const MAX_STEPS_PER_FRAME = 5;
 
+/**
+ * Simulation steps between trail captures: 30 Hz against the 120 Hz step.
+ *
+ * Tied to steps and not to frames on purpose. A trail is a length of *time*,
+ * and one sample per frame would make it half as long on a machine rendering
+ * at 30 fps as on one at 60 — the trail would get shorter exactly when the
+ * thing it is drawn on got slower.
+ */
+const TRAIL_CAPTURE_STEPS = 4;
+
 export interface AppOptions {
   /** Upper bound on boid count; sizes the simulation's arrays. */
   capacity?: number;
@@ -74,6 +90,23 @@ export interface App {
   dispose(): void;
 }
 
+/**
+ * A simulation and everything the renderer needs to draw it.
+ *
+ * There are two: the flock, and step 4a's design harness. They are whole
+ * scenes rather than a switch inside the renderer because that is what makes
+ * the harness worth anything — it goes through the same feed, the same trail
+ * history and the same draw calls as the real thing, so a mark that looks
+ * right there is not looking right by special arrangement.
+ */
+interface Scene {
+  readonly simulation: Simulation;
+  readonly feed: BoidFeed;
+  readonly trails: TrailHistory;
+  readonly target: BoidTarget;
+  dispose(): void;
+}
+
 export function createApp(
   sceneElement: HTMLCanvasElement,
   overlayElement: HTMLCanvasElement,
@@ -91,16 +124,43 @@ export function createApp(
     viewportHeight: surface.size.height,
   });
 
-  const simulation = createFlock({ capacity, params, seed: options.seed ?? 1 });
-  const feed = createUploadFeed(gl, simulation);
-
   const grid = createGridRenderer(gl);
+  const boids = createBoidRenderer(gl);
+
+  const createScene = (simulation: Simulation): Scene => {
+    const feed = createUploadFeed(gl, simulation);
+    const trails = createUploadTrailHistory(gl, simulation);
+    const target = boids.bind(feed, trails, simulation.ranges);
+    return {
+      simulation,
+      feed,
+      trails,
+      target,
+      dispose(): void {
+        target.dispose();
+        trails.dispose();
+        feed.dispose();
+      },
+    };
+  };
+
+  const live = createScene(createFlock({ capacity, params, seed: options.seed ?? 1 }));
+  const design = createScene(createPoseTrack());
+
   const overlayOptions: OverlayOptions = { ...DEFAULT_OVERLAY_OPTIONS };
   const overlay = createOverlay(overlayElement, overlayOptions);
 
-  // Temporary: a zoom to scroll and a camera to move, so the grid can be
-  // looked at. Replaced by the real controls in step 5 — see dev/grid-controls.
-  const controls = createGridControls(sceneElement, camera, overlayOptions);
+  // Temporary: a zoom to scroll, a camera to move, and the presets behind both
+  // comparison modes. Replaced by the real controls in step 5 — see `dev/`.
+  // The boids' half is created first because it owns the switch that decides
+  // which of the two the number keys belong to.
+  const boidControls = createBoidControls(camera);
+  const controls = createGridControls(
+    sceneElement,
+    camera,
+    overlayOptions,
+    () => !boidControls.focused,
+  );
 
   const applySize = (): void => {
     const { width, height, deviceWidth, deviceHeight } = surface.size;
@@ -142,6 +202,8 @@ export function createApp(
   let running = false;
   let previous = 0;
   let accumulator = 0;
+  let stepsSinceCapture = 0;
+  let active: Scene = live;
 
   const frame = (nowMs: number): void => {
     const now = nowMs / 1000;
@@ -149,33 +211,60 @@ export function createApp(
     accumulator += Math.min(now - previous, MAX_FRAME_TIME);
     previous = now;
 
+    const scene = boidControls.designing ? design : live;
+    if (scene !== active) {
+      active = scene;
+      // The scene that was paused holds history from whenever it last ran, and
+      // the one taking over may never have run at all. Collapse the trails to
+      // where the boids are now rather than streaking in from the past.
+      scene.trails.seed(0, scene.simulation.capacity);
+    }
+
     // Re-projected every frame rather than on the pointer event: the camera
     // moves under a stationary pointer, and the world point beneath it moves
     // with it.
     if (cursorOverCanvas) camera.screenToWorld(cursorScreenX, cursorScreenY, cursor);
     input.cursor = cursorOverCanvas ? cursor : null;
 
-    const simStarted = performance.now();
     let steps = 0;
+    let simMs = 0;
     while (accumulator >= FIXED_STEP && steps < MAX_STEPS_PER_FRAME) {
-      simulation.step(FIXED_STEP, input);
+      // Timed per step rather than around the loop, so the trail upload below
+      // does not land in the simulation's number and make it look slow.
+      const stepStarted = performance.now();
+      scene.simulation.step(FIXED_STEP, input);
+      simMs += performance.now() - stepStarted;
+
       accumulator -= FIXED_STEP;
       steps++;
+
+      // Inside the loop, not after it: a frame that runs several steps has
+      // several moments to record, and recording them all from the last one
+      // would bunch the trail up.
+      if (++stepsSinceCapture >= TRAIL_CAPTURE_STEPS) {
+        stepsSinceCapture = 0;
+        scene.trails.capture();
+      }
     }
     // Still owed time after the cap: write it off rather than spiral. See
     // MAX_STEPS_PER_FRAME.
     const behind = accumulator >= FIXED_STEP;
     if (behind) accumulator = 0;
-    stats.record(frameMs, performance.now() - simStarted, steps, behind);
+    stats.record(frameMs, simMs, steps, behind);
 
     // Once per frame, after the steps: see BoidFeed.sync.
-    feed.sync();
+    scene.feed.sync();
 
     const { deviceWidth, deviceHeight, pixelRatio } = surface.size;
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    const quadrants = controls.quadrants;
-    if (quadrants) {
+    // At most one of these is ever set: each half of the controls hands out
+    // quadrants only while the number keys belong to it.
+    const gridPanes = controls.quadrants;
+    const boidPanes = boidControls.quadrants;
+    const panes = gridPanes ?? boidPanes;
+
+    if (panes) {
       // Four variants of the same view, in one frame. Each quadrant is its own
       // GL viewport at the same camera and the same scale, so the only thing
       // that differs between them is the style — which is what makes one look
@@ -187,12 +276,21 @@ export function createApp(
       // Reading order, so quadrant 1 is top-left; GL's y runs the other way.
       const rows = [splitY, 0];
       const heights = [deviceHeight - splitY, splitY];
-      for (let i = 0; i < quadrants.length; i++) {
+      for (let i = 0; i < panes.length; i++) {
         rect.x = columns[i % 2];
         rect.y = rows[Math.floor(i / 2)];
         rect.width = widths[i % 2];
         rect.height = heights[Math.floor(i / 2)];
-        grid.draw(camera, pixelRatio, quadrants[i].style, rect);
+        // The grid is opaque and covers its rect, so it goes under the boids
+        // in every pane rather than once for the whole frame.
+        grid.draw(camera, pixelRatio, gridPanes?.[i].style ?? controls.style, rect);
+        boids.draw(
+          scene.target,
+          camera,
+          pixelRatio,
+          boidPanes?.[i].style ?? boidControls.style,
+          rect,
+        );
       }
     } else {
       rect.x = 0;
@@ -200,19 +298,22 @@ export function createApp(
       rect.width = deviceWidth;
       rect.height = deviceHeight;
       grid.draw(camera, pixelRatio, controls.style, rect);
+      boids.draw(scene.target, camera, pixelRatio, boidControls.style, rect);
     }
-    // The grid leaves its last quadrant as the viewport; hand the full buffer
-    // back for whatever draws next.
+    // The draws leave their last quadrant as the viewport; hand the full buffer
+    // back for whatever comes next.
     gl.viewport(0, 0, deviceWidth, deviceHeight);
-
-    // The boids arrive in step 4b, between the grid and the overlay.
 
     overlay.draw({
       camera,
       cursor: cursorOverCanvas ? cursor : null,
-      style: quadrants ? quadrants[0].style : controls.style,
-      quadrants: quadrants ? quadrants.map((quadrant) => quadrant.caption) : null,
-      help: controls.help,
+      style: gridPanes ? gridPanes[0].style : controls.style,
+      boid: {
+        styleName: (boidPanes ? boidPanes[0].style : boidControls.style).name,
+        count: scene.feed.count,
+      },
+      quadrants: panes ? panes.map((pane) => pane.caption) : null,
+      help: boidControls.focused ? boidControls.help : `${controls.help} · ${boidControls.hint}`,
       stats: stats.current,
     });
 
@@ -221,15 +322,21 @@ export function createApp(
 
   return {
     camera,
-    simulation,
-    feed,
+    simulation: live.simulation,
+    feed: live.feed,
 
     setParams(next: Readonly<SimParams>): void {
-      simulation.setParams(next);
+      const before = live.simulation.count;
+      live.simulation.setParams(next);
+      // New boids are placed beside boids already flying, so they have a
+      // present but no past; without this they arrive trailing whatever the
+      // last occupant of their slot was doing.
+      if (live.simulation.count > before) live.trails.seed(before, live.simulation.count);
     },
 
     reset(seed: number): void {
-      simulation.reset(seed);
+      live.simulation.reset(seed);
+      live.trails.seed(0, live.simulation.capacity);
     },
 
     start(): void {
@@ -252,10 +359,13 @@ export function createApp(
       sceneElement.removeEventListener('pointerleave', onPointerLeave);
       stopWatchingSize();
       controls.dispose();
+      boidControls.dispose();
       overlay.dispose();
+      design.dispose();
+      live.dispose();
+      boids.dispose();
       grid.dispose();
       surface.dispose();
-      feed.dispose();
     },
   };
 }

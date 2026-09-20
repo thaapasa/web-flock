@@ -26,9 +26,10 @@ import type { SimParams } from './params';
  *    or objects with behaviour. Plain data is equally natural as JavaScript
  *    fields or as a uniform block.
  *
- * 3. **Whatever the camera needs to aim itself comes from the backend**, via
- *    {@link FlockSample}, because only the backend knows what it can afford to
- *    produce. The camera never scans the full flock itself.
+ * 3. **Whatever the rest of the program needs to summarise the flock comes
+ *    from the backend** — {@link FlockSample} for the camera, {@link FlockRanges}
+ *    for the renderer's colour ramps — because only the backend knows what it
+ *    can afford to produce. Nobody else scans the full flock.
  *
  * Nothing here says where the arithmetic happens. That is the point.
  */
@@ -54,6 +55,32 @@ export interface FlockSample {
    * damping absorbs.
    */
   readonly centroid: Readonly<Vec2>;
+}
+
+/**
+ * The bands the renderer maps its colour ramps across.
+ *
+ * Here for the same reason {@link FlockSample} is: only the backend knows what
+ * its own numbers look like, and a renderer that guessed would be wrong the
+ * moment anything was tuned. A style says *where in the band* its ramp starts
+ * and ends, as a fraction, and the band itself moves with the flock — so
+ * retuning speed in 7a, or dragging the count slider in 4b, changes what the
+ * colours mean without changing a single style.
+ *
+ * Speed is exact: the flock is held between these two by construction.
+ * {@link maxDensity} cannot be, because there is no parameter that says how
+ * crowded a flock gets — it falls out of the count, the neighbour radius and
+ * how tightly the rules pack them. So it is estimated and smoothed, and it is
+ * a soft top rather than a maximum: boids above it sit at the end of the ramp.
+ *
+ * Valid after {@link Simulation.step}; the same object is reused across steps.
+ */
+export interface FlockRanges {
+  /** World units per second. */
+  readonly minSpeed: number;
+  readonly maxSpeed: number;
+  /** Neighbour count near the top of the flock's spread. Never below 1. */
+  readonly maxDensity: number;
 }
 
 /** Per-step inputs that are not parameters: things that change every frame. */
@@ -87,9 +114,28 @@ export interface Simulation {
   readonly velocities: Float32Array;
 
   /**
-   * Bumped whenever {@link positions} or {@link velocities} change, so a
-   * consumer can skip work when nothing has moved. Opaque: compare it for
-   * equality, do not do arithmetic on it.
+   * Neighbours within `params.neighbourRadius`, one count per boid, packed
+   * like {@link positions} but one element each.
+   *
+   * Here because how crowded a boid is turns out to be the most useful thing
+   * to colour it by, and only the simulation can say — the renderer would have
+   * to build a second neighbour index to find out. Counted **omnidirectionally**
+   * rather than through the field of view: a crowd presses on you from every
+   * side, and a density that dropped when a boid turned would read as flicker.
+   *
+   * A raw count, not a fraction. Which range of counts maps to which colours is
+   * a taste call and belongs to the style, not to the simulation.
+   *
+   * Describes the neighbourhood the step was *computed from*, so it lags
+   * {@link positions} by one integration. Nothing that matters at a boid's
+   * speed, and closing the gap would mean a second neighbour pass.
+   */
+  readonly densities: Float32Array;
+
+  /**
+   * Bumped whenever the per-boid arrays change, so a consumer can skip work
+   * when nothing has moved. Opaque: compare it for equality, do not do
+   * arithmetic on it.
    */
   readonly revision: number;
 
@@ -123,6 +169,9 @@ export interface Simulation {
 
   /** Valid after {@link step}; the same object is reused across steps. */
   readonly sample: FlockSample;
+
+  /** Valid after {@link step}; the same object is reused across steps. */
+  readonly ranges: FlockRanges;
 }
 
 export interface SimulationOptions {

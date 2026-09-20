@@ -176,7 +176,7 @@ each point the number keys at their own list.
 Text is a second canvas with the 2D context over the WebGL one. A glyph atlas and a layout pass
 would buy nothing here, because these few dozen numbers never need to be inside the scene.
 
-### 4a. Design one boid — Collaborate
+### 4a. Design one boid — Collaborate — done
 
 A single large boid on screen, slowly rotating, with its trail. Iterate live until the mark itself
 looks right.
@@ -191,6 +191,68 @@ This is where these get decided rather than guessed:
 
 Needs only the scaffold and a fake velocity, so it can start early — before the simulation is
 finished.
+
+Done. The mark is a **chevron found per pixel as a distance field** over one instanced quad, covered
+with the same box filter as the grid. That was not one of the options considered; stroking real
+geometry was, and it loses on every count — `gl.lineWidth` is capped at 1 on every platform that
+matters, so stroke weight would not have been adjustable at all, and glow in 7b is a change to a
+number rather than a mesh. Below about 5.6 px of mark the **stroke thins in proportion** instead of
+filling it in, so a flock far enough away thins into a texture while every boid still points
+somewhere. Direction survives the floor, which CLAUDE.md requires and a fixed stroke would not.
+
+**The ribbon won.** Both trails were built and compared side by side, which is the only reason the
+answer is trustworthy — a straight streak looks perfectly good until the boid turns, and then it
+points off at a tangent while the boid curves away from it. The streak was then deleted rather than
+left behind a flag. The ribbon is threaded through recorded positions and slid back half a mark
+along the path, so it leaves the chevron's open back rather than starting at the boid's centre,
+which is inside the V. Sliding the whole ribbon and not just its head matters: a boid covers less
+ground between captures than half its own length, so insetting the head alone folds the first
+segment over.
+
+History is a texture — one column per boid, one row per sample — because a vertex shader cannot
+reach per-boid history through attributes: an attribute is indexed by instance or by vertex, never
+by both. Each texel is `(x, y, speed, density)`, and capture is tied to **simulation steps, not
+frames**, so a trail is a length of time rather than a length of framerate.
+
+Recording speed per sample, rather than colouring the whole trail by what the boid is doing now, is
+what makes the trail a history of the flight instead of a shadow of the present. It was not in the
+plan and is most of what makes the mark feel alive.
+
+**Colour is speed, through the `signal` scheme.** Density was built too, reads well, and is kept —
+as a palette the user switches to in step 5 rather than as the default. Six schemes survive for the
+same reason; which one a given person wants is not a thing to settle here.
+
+Neither ramp names a world value. Both are **fractions of a band the simulation reports**, because
+both would otherwise go stale without looking stale: retuning speed in 7a, or dragging the count
+slider in 4b, would leave the ramp spanning something the flock no longer does, and every boid would
+come out the same colour. Speed is exact from the parameters; crowding has no parameter to read, so
+`FlockRanges.maxDensity` is estimated as mean plus 1.5 standard deviations over the sample the
+camera already needs — one pass, no sort, and measured to land within a point or two of the true
+90th percentile from 500 boids to 5,000. It is smoothed over 1.5 s because a band is the divisor of
+a colour, and one that twitched would shimmer the whole flock between hues while nothing about the
+flock had changed.
+
+Two additions to step 1's contract. `Simulation.densities` carries an omnidirectional neighbour
+count — omnidirectional because how crowded it is here is not a directional question, and a density
+that dropped when a boid turned would read as flicker. `Simulation.ranges` carries the colour bands,
+for the same reason `FlockSample` carries the camera's: only the backend knows what its own numbers
+look like.
+
+The design harness is `dev/pose-track.ts`, six specimens on fixed paths, and it is a `Simulation`
+rather than a drawing mode — so the real feed, the real history and the real draw calls all run
+against it, and a mark that looks right there is not looking right by special arrangement. Its
+velocities come from a central difference across the path, so a chevron cannot point somewhere the
+boid is not going. PLAN.md asked for one slowly rotating boid; that shows the chevron but says
+nothing about the trail, and the trail's whole question is what happens in a turn.
+
+One bug worth recording, because it will recur the moment 7b adds a glow: `pow(0.0, k)` is defined
+by the spec but drivers computing it as `exp2(k * log2(x))` return NaN, and a NaN in a vertex output
+interpolates across a whole segment and reaches the framebuffer as saturated white. Every `pow`
+whose base can reach zero now has a floor under it.
+
+Left open on purpose, for 4b: additive blending has never been seen with a crowd, and at
+`separationRadius` 6 against a 5-unit mark the boids fly close enough that trails will cross
+constantly. Whether the mark survives that is not a question six specimens can answer.
 
 ### 4b. Render five thousand — Review
 
@@ -276,6 +338,8 @@ the boid mark.
 ## Open questions
 
 - Tick label format and placement (decided in step 3)
-- Trail construction, chevron proportions, colour (decided in 4a)
+- ~~Trail construction, chevron proportions, colour~~ â decided in 4a: a ribbon through recorded
+  positions, a chevron drawn as a distance field, colour by speed with the palette left for the user
+  to switch
 - Slider ranges (decided in 7a)
 - Whether Tweakpane gets replaced (decided in 7b)

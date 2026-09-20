@@ -52,11 +52,19 @@ export const DEFAULT_OVERLAY_OPTIONS: OverlayOptions = {
   fontSize: 11,
 };
 
+/** What the readout says about the boids. Null before anything draws them. */
+export interface BoidReadout {
+  readonly styleName: string;
+  readonly count: number;
+}
+
 export interface OverlayFrame {
   camera: Camera;
   /** World-space cursor, or null when it is not over the canvas. */
   cursor: Readonly<Vec2> | null;
   style: Readonly<GridStyle>;
+  /** Null when nothing is drawing boids, which hides the line. */
+  boid: BoidReadout | null;
   /**
    * Comparison mode: the four captions in reading order, top-left first. Null
    * for an ordinary frame, which is what draws tick labels.
@@ -177,6 +185,7 @@ export function createOverlay(
       `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}`,
       `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
       `style   ${frame.style.name}`,
+      ...(frame.boid ? [`boid    ${frame.boid.styleName} · ${frame.boid.count}`] : []),
     ];
 
     ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;

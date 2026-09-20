@@ -1,4 +1,5 @@
 import type { Camera } from '../camera/camera';
+import type { ViewportRect } from './gl';
 import { createProgram, createVertexArray, draw, getUniformLocations, withDefines } from './gl';
 import fragmentSource from './grid.frag?raw';
 import vertexSource from './grid.vert?raw';
@@ -44,18 +45,6 @@ const UNIFORM_NAMES = [
   'uOriginRadius',
   'uOriginBoost',
 ] as const;
-
-/**
- * A rectangle of the drawing buffer, in device pixels, **y measured from the
- * bottom** as GL viewports are. The whole buffer for a normal frame; one
- * quadrant at a time in comparison mode.
- */
-export interface ViewportRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 export interface GridRenderer {
   /**

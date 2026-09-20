@@ -2,6 +2,7 @@ import { createRandom, hashSeed } from '../math/rng';
 import type { Vec2 } from '../math/types';
 import type { SimParams } from './params';
 import type {
+  FlockRanges,
   FlockSample,
   SimInput,
   Simulation,
@@ -14,6 +15,27 @@ const TWO_PI = Math.PI * 2;
 
 /** Below this a vector has no usable direction and is treated as having none. */
 const EPSILON = 1e-9;
+
+/**
+ * How far above the mean neighbour count the density band's top sits.
+ *
+ * A percentile would be the honest statistic, but a percentile needs a sort,
+ * and this is recomputed every step. Mean plus a fixed number of standard
+ * deviations is one pass over the sample, lands near the ninetieth percentile
+ * for counts spread like these, and — the part that actually matters — moves
+ * with the flock instead of jumping when one boid crosses a rank boundary.
+ */
+const DENSITY_SIGMAS = 1.5;
+
+/**
+ * Seconds the density band takes to follow a change.
+ *
+ * It is the divisor of a colour, so it must not jitter: a band twitching frame
+ * to frame makes the whole flock shimmer between hues while nothing about the
+ * flock has changed. Slow enough to be invisible, fast enough to catch up
+ * within a second or two of the count slider moving.
+ */
+const DENSITY_TIME_CONSTANT = 1.5;
 
 /** Mutable view of the sample the flock owns and hands out as readonly. */
 interface MutableSample {
@@ -49,6 +71,7 @@ class Flock implements Simulation {
   readonly capacity: number;
   readonly positions: Float32Array;
   readonly velocities: Float32Array;
+  readonly densities: Float32Array;
 
   private readonly accelerations: Float32Array;
   private readonly wanderAngles: Float32Array;
@@ -59,6 +82,10 @@ class Flock implements Simulation {
   private readonly candidates: Int32Array;
 
   private readonly sampleState: MutableSample;
+
+  private readonly rangeState: { minSpeed: number; maxSpeed: number; maxDensity: number };
+  /** Where {@link rangeState}'s density is heading, before smoothing. */
+  private densityTarget = 0;
 
   private params: SimParams;
   private _count: number;
@@ -71,6 +98,7 @@ class Flock implements Simulation {
 
     this.positions = new Float32Array(this.capacity * 2);
     this.velocities = new Float32Array(this.capacity * 2);
+    this.densities = new Float32Array(this.capacity);
     this.accelerations = new Float32Array(this.capacity * 2);
     this.wanderAngles = new Float32Array(this.capacity);
     this.noise = new Uint32Array(this.capacity);
@@ -85,6 +113,7 @@ class Flock implements Simulation {
       centroid: { x: 0, y: 0 },
     };
 
+    this.rangeState = { minSpeed: 0, maxSpeed: 0, maxDensity: 1 };
     this._count = clampCount(this.params.count, this.capacity);
     // Replaced immediately by reset(); assigned here only because TypeScript
     // cannot see that the call below initialises it.
@@ -104,6 +133,10 @@ class Flock implements Simulation {
     return this.sampleState;
   }
 
+  get ranges(): FlockRanges {
+    return this.rangeState;
+  }
+
   setParams(params: Readonly<SimParams>): void {
     this.params = { ...params };
     const next = clampCount(params.count, this.capacity);
@@ -120,6 +153,7 @@ class Flock implements Simulation {
     this.spawnRandom = createRandom(hashSeed(seed ^ 0x5bf03635));
 
     // Every slot, not just the live ones, so nothing is ever read uninitialised.
+    this.densities.fill(0);
     for (let i = 0; i < this.capacity; i++) {
       this.scatterOnSpawnDisc(i, random);
       this.noise[i] = seedNoise(seed, i);
@@ -128,6 +162,7 @@ class Flock implements Simulation {
 
     this._revision++;
     this.updateSample();
+    this.snapRanges();
   }
 
   step(dt: number, input: SimInput): void {
@@ -205,6 +240,7 @@ class Flock implements Simulation {
       let cohesionX = 0;
       let cohesionY = 0;
       let seen = 0;
+      let crowd = 0;
 
       for (let k = 0; k < blockSize; k++) {
         const j = candidates[k];
@@ -222,6 +258,9 @@ class Flock implements Simulation {
         }
 
         if (distance2 <= neighbourRadius2) {
+          // Before the field-of-view test, not after: density is how crowded it
+          // is here, which is not a directional question. See Simulation.densities.
+          crowd++;
           const dot = dx * headingX + dy * headingY;
           const inView = wideFieldOfView
             ? dot >= 0 || dot * dot <= cosFieldOfView2 * distance2
@@ -304,6 +343,7 @@ class Flock implements Simulation {
 
       accelerations[i * 2] = ax;
       accelerations[i * 2 + 1] = ay;
+      this.densities[i] = crowd;
     }
 
     // --- Pass two: integrate.
@@ -352,6 +392,20 @@ class Flock implements Simulation {
     }
 
     this.updateSample();
+
+    this.rangeState.minSpeed = minSpeed;
+    this.rangeState.maxSpeed = maxSpeed;
+    const blend = Math.min(1, dt / DENSITY_TIME_CONSTANT);
+    this.rangeState.maxDensity += (this.densityTarget - this.rangeState.maxDensity) * blend;
+  }
+
+  /** Puts the bands where the flock is now, with no glide. */
+  private snapRanges(): void {
+    const p = this.params;
+    const maxSpeed = Math.max(p.maxSpeed, EPSILON);
+    this.rangeState.maxSpeed = maxSpeed;
+    this.rangeState.minSpeed = Math.min(Math.max(p.minSpeed, 0), maxSpeed);
+    this.rangeState.maxDensity = this.densityTarget;
   }
 
   /** xorshift32. Advances boid `i`'s own stream and returns `[0, 1)`. */
@@ -394,6 +448,7 @@ class Flock implements Simulation {
     for (let i = from; i < to; i++) {
       this.noise[i] = seedNoise(from ^ 0x7f4a7c15, i);
       this.wanderAngles[i] = (random() * 2 - 1) * Math.PI;
+      this.densities[i] = 0;
 
       if (from === 0) {
         // No flock to join yet.
@@ -430,12 +485,15 @@ class Flock implements Simulation {
     if (n === 0) {
       sample.centroid.x = 0;
       sample.centroid.y = 0;
+      this.densityTarget = 1;
       return;
     }
 
     const stride = this._count / n;
     let sumX = 0;
     let sumY = 0;
+    let sumDensity = 0;
+    let sumDensity2 = 0;
     for (let k = 0; k < n; k++) {
       const i = Math.min(this._count - 1, Math.floor(k * stride));
       const x = this.positions[i * 2];
@@ -444,9 +502,20 @@ class Flock implements Simulation {
       sample.positions[k * 2 + 1] = y;
       sumX += x;
       sumY += y;
+      const density = this.densities[i];
+      sumDensity += density;
+      sumDensity2 += density * density;
     }
     sample.centroid.x = sumX / n;
     sample.centroid.y = sumY / n;
+
+    // The density band, off the same sampled boids. One pass, no allocation,
+    // and it rides along with a loop the camera already needs — scanning the
+    // whole flock for a statistic nobody reads per boid would be the wrong
+    // trade at five thousand.
+    const mean = sumDensity / n;
+    const variance = Math.max(0, sumDensity2 / n - mean * mean);
+    this.densityTarget = Math.max(1, mean + DENSITY_SIGMAS * Math.sqrt(variance));
   }
 }
 

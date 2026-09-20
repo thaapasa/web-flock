@@ -20,8 +20,7 @@
  * in `grid.ts`.
  */
 
-/** Linear, 0..1 per channel. Not gamma-corrected; these are shader values. */
-export type RGB = readonly [r: number, g: number, b: number];
+import type { RGB } from './colour';
 
 /**
  * Shape of a decade's brightness ramp as its lines spread apart on screen.
