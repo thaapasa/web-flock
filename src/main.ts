@@ -1,6 +1,9 @@
 import { createApp } from './app';
 
-const canvasElement = document.querySelector<HTMLCanvasElement>('#canvas');
-if (!canvasElement) throw new Error('#canvas is missing from the page');
+function canvas(id: string): HTMLCanvasElement {
+  const element = document.querySelector<HTMLCanvasElement>(`#${id}`);
+  if (!element) throw new Error(`#${id} is missing from the page`);
+  return element;
+}
 
-createApp(canvasElement).start();
+createApp(canvas('scene'), canvas('overlay')).start();

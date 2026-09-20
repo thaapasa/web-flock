@@ -73,7 +73,7 @@ export interface SimParams {
  * are found by watching the thing rather than reasoning about it.
  */
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
-  count: 5000,
+  count: 500,
 
   separationRadius: 6,
   neighbourRadius: 24,
