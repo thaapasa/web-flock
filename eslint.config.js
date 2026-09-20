@@ -9,7 +9,7 @@ import tseslint from 'typescript-eslint';
 // config it disables 358 rules, none of which we enable. Re-check if a config
 // that does carry formatting rules is ever added.
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', '.yarn'] },
+  { ignores: ['dist', 'site', 'node_modules', '.yarn'] },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
