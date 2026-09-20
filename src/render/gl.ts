@@ -206,3 +206,30 @@ export function drawInstanced(
   gl.drawArraysInstanced(mode, first, vertexCount, instanceCount);
   gl.bindVertexArray(null);
 }
+
+/**
+ * Prepends `#define`s to a shader.
+ *
+ * Shaders live in their own `.vert` and `.frag` files, which an editor can
+ * highlight and a GLSL tool can parse — but a file cannot read a TypeScript
+ * constant, and a constant repeated in both places is one that will drift. So
+ * the values that must agree with the CPU side are injected here instead of
+ * being written twice.
+ *
+ * `#version` has to be the first thing in a GLSL source, so the defines go
+ * after it rather than at the top. That shifts the line numbers the compiler
+ * reports relative to the file on disk; {@link createProgram} prints the
+ * assembled source on failure, so the numbers in an error message still match
+ * the listing printed beside it.
+ */
+export function withDefines(source: string, defines: Record<string, number>): string {
+  const lines = Object.entries(defines).map(([name, value]) => `#define ${name} ${value}`);
+  if (lines.length === 0) return source;
+
+  const block = `${lines.join('\n')}\n`;
+  const firstBreak = source.indexOf('\n');
+  if (source.startsWith('#version') && firstBreak !== -1) {
+    return source.slice(0, firstBreak + 1) + block + source.slice(firstBreak + 1);
+  }
+  return block + source;
+}

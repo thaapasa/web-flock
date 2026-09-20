@@ -116,7 +116,7 @@ calibration loop, so nothing measured in it says whether 5,000 boids hold 60fps.
 answers that, on a real machine. The relevant lever, if it turns out to be needed, is that cost
 scales with the square of `neighbourRadius`.
 
-### 3. The grid — Collaborate (labels: Review)
+### 3. The grid — Collaborate (labels: Review) — done
 
 Fullscreen shader, per-decade fade driven by log zoom, anti-aliased lines, emphasized axes, origin
 marker, edge tick labels, live coordinate readout.
@@ -132,6 +132,49 @@ again in 7a.
 
 Tick labels and the coordinate readout ride along as Review. Open taste calls: `1200` vs `1.2k`,
 labels on the screen edge or on the axes.
+
+Done. The maths lives on the CPU in `render/grid-bands.ts`, where it can be tested, and the shader
+consumes what comes out of it. One rule carries the whole thing: **a line's brightness is a function
+of how far apart that decade's lines are on screen, and nothing else.** Every line belongs to
+several decades at once — the line at 100 is also a multiple of 10 and of 1 — so the shader takes
+the **maximum** weight over the decades a pixel falls on rather than the sum. A line is then drawn
+at the weight of the coarsest decade it belongs to, automatically, with no "which decade owns this
+line" test anywhere, and never brighter than 1, which is what a sum would do at every intersection
+of scales.
+
+The plan asked for fade weights that "sum consistently so brightness does not pulse at a handover".
+Summing is exactly what cannot be done. Continuity instead follows from two facts: a decade enters
+the set precisely where its weight is 0, and leaves only once its weight has saturated at 1, so the
+decade above is already drawing its lines at the same brightness. Neither is tuned. Both are
+asserted by sweeping the zoom across six decades and requiring that no line's brightness ever jump,
+and that no line ever dim as it gains room.
+
+**Everything in the shader is in device pixels**, never world units. A world unit is a bad numeric
+neighbourhood once the flock has migrated a few hundred thousand units out: float32 runs out of
+mantissa and the lines shimmer. `bandPhase` reduces each decade to an offset within half a spacing
+of the camera centre, once per decade per frame, in float64 — so the shader never handles a large
+number at all. Pinned by a test at a million units out.
+
+Line coverage is a **box filter rather than a smoothstep**, because it stays honest below one pixel:
+a half-pixel line comes out at half brightness instead of being quietly fattened to a full one,
+which is what lets fine lines fade out rather than crowd together. The same function now draws the
+boids.
+
+The taste calls, all settled by eye against comparison mode. Preset `open`: lines that stay well
+apart, a two-decade ramp, axes that barely announce themselves. **Axes and origin are not special
+marks** — they are ordinary decade lines turned up slightly, which is why `axisBoost` is a
+multiplier and can only say "a bit more than a line at full strength". The origin marker is off: the
+origin of an unbounded plane the flock wanders away from carries no meaning worth a heavier mark.
+Labels sit on the screen edge and read `1.2k` rather than `1200`. Every losing option stays
+reachable — nine presets on the number keys, both label placements and both formats on `l` and `f` —
+because 7b looks at all of it again against the finished renderer.
+
+Comparison mode paid for itself immediately in 4a, as predicted, and the machinery is now shared:
+`dev/compare.ts` owns the preset list, the selection and the four panes, and the grid and the boids
+each point the number keys at their own list.
+
+Text is a second canvas with the 2D context over the WebGL one. A glyph atlas and a layout pass
+would buy nothing here, because these few dozen numbers never need to be inside the scene.
 
 ### 4a. Design one boid — Collaborate
 
