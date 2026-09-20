@@ -1,38 +1,56 @@
 import { Camera } from './camera/camera';
-import { createBoidControls, TOP_OF_LADDER } from './dev/boid-controls';
-import { createGridControls, MAX_LOG_SCALE, MIN_LOG_SCALE } from './dev/grid-controls';
-import { createPoseTrack } from './dev/pose-track';
+import type { CameraControl } from './camera/camera-control';
+import { createCameraControl } from './camera/camera-control';
 import { createReadingLog, describeRenderer } from './dev/readings';
+import { createStyleKeys } from './dev/style-keys';
 import type { Vec2 } from './math/types';
 import type { BoidFeed } from './render/boid-feed';
 import { createUploadFeed } from './render/boid-feed';
-import type { BoidTarget } from './render/boids';
 import { createBoidRenderer } from './render/boids';
 import { createResizingCanvas } from './render/canvas';
 import { createFrameStats } from './render/frame-stats';
 import type { ViewportRect } from './render/gl';
 import { getContext } from './render/gl';
+import type { CursorRing } from './render/grid';
 import { createGridRenderer } from './render/grid';
 import type { OverlayOptions } from './render/overlay';
 import { createOverlay, DEFAULT_OVERLAY_OPTIONS } from './render/overlay';
-import type { TrailHistory } from './render/trail-history';
 import { createUploadTrailHistory } from './render/trail-history';
 import { createFlock } from './sim/flock';
-import type { SimParams } from './sim/params';
-import { DEFAULT_SIM_PARAMS } from './sim/params';
 import type { SimInput, Simulation } from './sim/simulation';
+import type { Panel } from './ui/panel';
+import { createPanel } from './ui/panel';
+import type { Settings } from './ui/settings';
+import {
+  boidStyle,
+  copyInto,
+  cursorRadius,
+  defaultSettings,
+  exportLiteral,
+  gridStyle,
+  parse,
+  serialise,
+  simParams,
+} from './ui/settings';
+import type { SettingsStorage } from './ui/storage';
+import { createLocalStorage } from './ui/storage';
 
 /**
  * The orchestrator.
  *
  * It owns the pieces and the frame loop, and is the only place that knows the
  * pieces exist in the same program: the canvases, the GL context, the camera,
- * the simulation, and the feed that carries the simulation's output to the GPU.
- * Everything it assembles is independently testable because none of them refer
- * to each other.
+ * the simulation, the feed that carries the simulation's output to the GPU,
+ * and — since step 5 — the settings every one of them reads from.
  *
- * Steps 5 and 6 plug in here — controls, camera behaviour — which is why the
- * wiring is a module rather than the body of `main`.
+ * The settings are the shape of the program now. One object holds everything
+ * the user can change; the panel mutates it, the wheel and the preset keys
+ * mutate it, and this file is the only thing that turns it into a simulation
+ * parameter set, a pair of styles and a camera. Nothing downstream keeps a
+ * copy, so there is no state to get out of step.
+ *
+ * Step 6 plugs in here — the damping that makes the camera comfortable — which
+ * is why the wiring is a module rather than the body of `main`.
  */
 
 /** Seconds per simulation step. 120 Hz, so a 60 fps frame is two steps. */
@@ -72,64 +90,60 @@ const MAX_STEPS_PER_FRAME = 5;
 const TRAIL_CAPTURE_STEPS = 4;
 
 /**
- * Fraction of the flock `z` frames, and the room left around it.
+ * How many boids the arrays are sized for.
  *
- * The quantile is step 6's: the tightest region holding most of the flock, so
- * a single straggler halfway to the horizon cannot force a zoom-out. This is a
- * one-shot version of it, with none of the damping or hysteresis that make
- * step 6 hard — the camera does not follow anything yet, and a crowd you
- * cannot find is a crowd you cannot review.
+ * Step 4b's target, and the top of the count slider: the arrays are allocated
+ * once and the slider must be able to reach five thousand without a restart.
+ * All of it together is under two megabytes.
  */
-const FRAME_QUANTILE = 0.85;
-const FRAME_MARGIN = 1.25;
+const DEFAULT_CAPACITY = 5000;
+
+/**
+ * How long a change waits before it is written to storage.
+ *
+ * Dragging a slider fires a change per frame, and a flock is tuned by dragging.
+ * Long enough that a drag writes once at the end, short enough that a change
+ * followed by a closed tab is almost always kept — and `pagehide` catches the
+ * rest.
+ */
+const SAVE_DELAY_MS = 400;
 
 export interface AppOptions {
   /** Upper bound on boid count; sizes the simulation's arrays once. */
   capacity?: number;
-  params?: Readonly<SimParams>;
   seed?: number;
+  /** Where settings are kept between visits. Defaults to `localStorage`. */
+  storage?: SettingsStorage;
 }
 
 export interface App {
   readonly camera: Camera;
   readonly simulation: Simulation;
   readonly feed: BoidFeed;
-  /** Live parameters. Takes effect on the next step, with no restart. */
-  setParams(params: Readonly<SimParams>): void;
-  /** Restarts the flock from a seeded state, leaving parameters alone. */
+  /**
+   * Everything the user can change, live. Mutate it and call {@link apply};
+   * the panel does exactly that.
+   */
+  readonly settings: Settings;
+  /** Pushes the settings into the simulation and the overlay. No restart. */
+  apply(): void;
+  /** Restarts the flock from a seeded state, leaving the settings alone. */
   reset(seed: number): void;
   start(): void;
   stop(): void;
   dispose(): void;
 }
 
-/**
- * A simulation and everything the renderer needs to draw it.
- *
- * There are two: the flock, and step 4a's design harness. They are whole
- * scenes rather than a switch inside the renderer because that is what makes
- * the harness worth anything — it goes through the same feed, the same trail
- * history and the same draw calls as the real thing, so a mark that looks
- * right there is not looking right by special arrangement.
- */
-interface Scene {
-  readonly simulation: Simulation;
-  readonly feed: BoidFeed;
-  readonly trails: TrailHistory;
-  readonly target: BoidTarget;
-  dispose(): void;
-}
-
 export function createApp(
   sceneElement: HTMLCanvasElement,
   overlayElement: HTMLCanvasElement,
+  panelElement: HTMLElement,
   options: AppOptions = {},
 ): App {
-  const params = options.params ?? DEFAULT_SIM_PARAMS;
-  // Sized for the top of the ladder, not for the starting count: the arrays
-  // are allocated once and `n`/`m` must be able to reach 5,000 without a
-  // restart. All of it together is under two megabytes.
-  const capacity = options.capacity ?? Math.max(TOP_OF_LADDER, Math.floor(params.count));
+  const storage = options.storage ?? createLocalStorage();
+  const settings = parse(storage.read());
+  const capacity = Math.max(options.capacity ?? DEFAULT_CAPACITY, Math.floor(settings.flock.count));
+  let seed = options.seed ?? 1;
 
   const surface = createResizingCanvas(sceneElement);
   const gl = getContext(sceneElement);
@@ -143,82 +157,56 @@ export function createApp(
   const grid = createGridRenderer(gl);
   const boids = createBoidRenderer(gl);
 
-  const createScene = (simulation: Simulation): Scene => {
-    const feed = createUploadFeed(gl, simulation);
-    const trails = createUploadTrailHistory(gl, simulation);
-    const target = boids.bind(feed, trails, simulation.ranges);
-    return {
-      simulation,
-      feed,
-      trails,
-      target,
-      dispose(): void {
-        target.dispose();
-        trails.dispose();
-        feed.dispose();
-      },
-    };
-  };
-
-  const live = createScene(createFlock({ capacity, params, seed: options.seed ?? 1 }));
-  const design = createScene(createPoseTrack());
+  const simulation = createFlock({ capacity, params: simParams(settings), seed });
+  const feed = createUploadFeed(gl, simulation);
+  const trails = createUploadTrailHistory(gl, simulation);
+  const target = boids.bind(feed, trails, simulation.ranges);
 
   const overlayOptions: OverlayOptions = { ...DEFAULT_OVERLAY_OPTIONS };
   const overlay = createOverlay(overlayElement, overlayOptions);
 
-  // Temporary: a zoom to scroll, a camera to move, and the presets behind both
-  // comparison modes. Replaced by the real controls in step 5 — see `dev/`.
-  // The boids' half is created first because it owns the switch that decides
-  // which of the two the number keys belong to.
   const stats = createFrameStats();
-  let active: Scene = live;
 
   /**
-   * The parameters as they stand. The count keys change one field of this and
-   * hand the whole thing back, because a parameter set is plain data — see
-   * `sim/params.ts`.
+   * Pushes the settings everywhere they have to go.
+   *
+   * Cheap enough to call on every step of a slider drag, which is what it gets:
+   * `setParams` stores the values and precomputes nothing, and the styles are
+   * read straight from the settings by the frame loop. The only part that does
+   * real work is a count that has grown, and only for the boids that are new.
    */
-  let currentParams: SimParams = { ...params };
-
-  const applyParams = (next: Readonly<SimParams>): void => {
-    currentParams = { ...next };
-    const before = live.simulation.count;
-    live.simulation.setParams(currentParams);
+  const apply = (): void => {
+    const before = simulation.count;
+    simulation.setParams(simParams(settings));
     // New boids are placed beside boids already flying, so they have a present
     // but no past; without this they arrive trailing whatever the last occupant
     // of their slot was doing.
-    if (live.simulation.count > before) live.trails.seed(before, live.simulation.count);
+    if (simulation.count > before) trails.seed(before, simulation.count);
+
+    overlayOptions.placement = settings.look.labels;
+    overlayOptions.format = settings.look.labelFormat;
   };
 
-  const setCount = (count: number): void => {
-    applyParams({ ...currentParams, count });
-  };
+  let saveHandle: ReturnType<typeof setTimeout> | null = null;
 
-  // Not a restart: the boids keep flying and drift apart over the next few
-  // seconds, which is the only way to see what the spacing does to the look.
-  const setSeparation = (separationRadius: number): void => {
-    applyParams({ ...currentParams, separationRadius });
-  };
-
-  /** Puts the flock on screen. See FRAME_QUANTILE. */
-  const frameFlock = (): void => {
-    const { positions, count, centroid } = active.simulation.sample;
-    if (count === 0) return;
-
-    const radii = new Float64Array(count);
-    for (let i = 0; i < count; i++) {
-      const dx = positions[i * 2] - centroid.x;
-      const dy = positions[i * 2 + 1] - centroid.y;
-      radii[i] = Math.sqrt(dx * dx + dy * dy);
+  const save = (): void => {
+    if (saveHandle !== null) {
+      clearTimeout(saveHandle);
+      saveHandle = null;
     }
-    radii.sort();
-    const reach = Math.max(radii[Math.floor((count - 1) * FRAME_QUANTILE)], 1e-3);
-
-    camera.setCenter(centroid.x, centroid.y);
-    const half = Math.min(camera.viewportWidth, camera.viewportHeight) / 2;
-    const wanted = Math.log10(half / (reach * FRAME_MARGIN));
-    camera.logScale = Math.min(MAX_LOG_SCALE, Math.max(MIN_LOG_SCALE, wanted));
+    storage.write(serialise(settings));
   };
+
+  /** See SAVE_DELAY_MS. */
+  const scheduleSave = (): void => {
+    if (saveHandle !== null) clearTimeout(saveHandle);
+    saveHandle = setTimeout(save, SAVE_DELAY_MS);
+  };
+
+  const onPageHide = (): void => {
+    if (saveHandle !== null) save();
+  };
+  window.addEventListener('pagehide', onPageHide);
 
   const readings = createReadingLog(describeRenderer(gl));
 
@@ -226,9 +214,9 @@ export function createApp(
   const dumpReadings = (): void => {
     const stat = stats.current;
     const { width, height, pixelRatio } = surface.size;
-    const style = boidControls.style;
+    const style = boidStyle(settings.look);
     const table = readings.add({
-      boids: active.feed.count,
+      boids: feed.count,
       trails: style.trail !== 'none',
       fps: stat.fps,
       frameMs: stat.frameMs,
@@ -237,17 +225,17 @@ export function createApp(
       steps: stat.steps,
       behind: stat.behind,
       scale: camera.scale,
-      band: active.simulation.ranges.maxDensity,
+      band: simulation.ranges.maxDensity,
       settings: {
         viewport: `${Math.round(width)}x${Math.round(height)} @${pixelRatio.toFixed(2)}x`,
         style: style.name,
         trailPoints: style.trailPoints,
         blend: style.blend,
         floorFade: style.floorFade,
-        neighbourRadius: currentParams.neighbourRadius,
-        separationRadius: currentParams.separationRadius,
-        minSpeed: currentParams.minSpeed,
-        maxSpeed: currentParams.maxSpeed,
+        neighbourRadius: settings.flock.neighbourRadius,
+        separationRadius: settings.flock.separationRadius,
+        minSpeed: settings.flock.minSpeed,
+        maxSpeed: settings.flock.maxSpeed,
       },
     });
     // One string, not an object: a console renders an object as a tree that
@@ -255,18 +243,61 @@ export function createApp(
     console.log(table);
   };
 
-  const boidControls = createBoidControls(camera, {
-    setCount,
-    setSeparation,
-    frameFlock,
-    dumpReadings,
-    clearReadings: () => readings.clear(),
+  // One forward reference: the camera refreshes the panel when the wheel
+  // writes to the settings, and the panel asks the camera to frame the flock.
+  // Both stand down while a Tweakpane field has the keyboard, because every
+  // global key in this app is a bare letter.
+  let panel: Panel | null = null;
+  const panelHasKeys = (): boolean => panel?.capturesKeys === true;
+
+  const cameraControl: CameraControl = createCameraControl(sceneElement, camera, {
+    settings: settings.camera,
+    sample: () => simulation.sample,
+    onZoomChanged: () => {
+      panel?.refresh();
+      scheduleSave();
+    },
+    active: () => !panelHasKeys(),
   });
-  const controls = createGridControls(
-    sceneElement,
-    camera,
-    overlayOptions,
-    () => !boidControls.focused,
+
+  panel = createPanel({
+    container: panelElement,
+    settings,
+    capacity,
+    hooks: {
+      apply: (committed: boolean): void => {
+        apply();
+        if (committed) scheduleSave();
+      },
+      frameFlock: () => cameraControl.frameFlock(),
+      restart: () => {
+        simulation.reset(seed);
+        trails.seed(0, simulation.capacity);
+      },
+      exportSettings: () => {
+        console.log(exportLiteral(settings));
+      },
+      reset: () => {
+        storage.clear();
+        // In place: the panel is bound to the objects inside `settings`.
+        copyInto(settings, defaultSettings());
+        apply();
+        panel?.refresh();
+      },
+    },
+  });
+
+  const styleKeys = createStyleKeys(
+    settings,
+    {
+      changed: () => {
+        panel?.refresh();
+        scheduleSave();
+      },
+      dumpReadings,
+      clearReadings: () => readings.clear(),
+    },
+    () => !panelHasKeys(),
   );
 
   const applySize = (): void => {
@@ -276,6 +307,7 @@ export function createApp(
   };
   const stopWatchingSize = surface.onResize(applySize);
   applySize();
+  apply();
 
   // Tracked in world space so it stays put under the flock when the camera
   // moves, rather than sliding with the screen.
@@ -302,6 +334,8 @@ export function createApp(
 
   /** Reused each frame; the grid's rects are the only allocation-prone part. */
   const rect: ViewportRect = { x: 0, y: 0, width: 1, height: 1 };
+  /** Reused each frame. Fields are readonly to the renderer, not to us. */
+  const ring: { x: number; y: number; radius: number } = { x: 0, y: 0, radius: 0 };
 
   let frameHandle = 0;
   let running = false;
@@ -315,20 +349,14 @@ export function createApp(
     accumulator += Math.min(now - previous, MAX_FRAME_TIME);
     previous = now;
 
-    const scene = boidControls.designing ? design : live;
-    if (scene !== active) {
-      active = scene;
-      // The scene that was paused holds history from whenever it last ran, and
-      // the one taking over may never have run at all. Collapse the trails to
-      // where the boids are now rather than streaking in from the past.
-      scene.trails.seed(0, scene.simulation.capacity);
-    }
-
     // Re-projected every frame rather than on the pointer event: the camera
     // moves under a stationary pointer, and the world point beneath it moves
     // with it.
     if (cursorOverCanvas) camera.screenToWorld(cursorScreenX, cursorScreenY, cursor);
-    input.cursor = cursorOverCanvas ? cursor : null;
+    // A cursor doing nothing is handed over as no cursor at all, so the step
+    // skips the distance test for every boid rather than multiplying by zero.
+    const pushing = cursorOverCanvas && settings.cursor.mode !== 'nothing';
+    input.cursor = pushing ? cursor : null;
 
     let steps = 0;
     let simMs = 0;
@@ -336,7 +364,7 @@ export function createApp(
       // Timed per step rather than around the loop, so the trail upload below
       // does not land in the simulation's number and make it look slow.
       const stepStarted = performance.now();
-      scene.simulation.step(FIXED_STEP, input);
+      simulation.step(FIXED_STEP, input);
       simMs += performance.now() - stepStarted;
 
       accumulator -= FIXED_STEP;
@@ -347,7 +375,7 @@ export function createApp(
       // would bunch the trail up.
       if (++stepsSinceCapture >= TRAIL_CAPTURE_STEPS) {
         stepsSinceCapture = 0;
-        scene.trails.capture();
+        trails.capture();
       }
     }
     // Still owed time after the cap: write it off rather than spiral. See
@@ -356,16 +384,32 @@ export function createApp(
     if (behind) accumulator = 0;
     stats.record(frameMs, simMs, steps, behind);
 
+    // After the steps, so the camera frames where the flock is now rather than
+    // where it was last frame. Undamped on purpose — that is step 6.
+    cameraControl.apply();
+
     // Once per frame, after the steps: see BoidFeed.sync.
-    scene.feed.sync();
+    feed.sync();
 
     const { deviceWidth, deviceHeight, pixelRatio } = surface.size;
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // At most one of these is ever set: each half of the controls hands out
-    // quadrants only while the number keys belong to it.
-    const gridPanes = controls.quadrants;
-    const boidPanes = boidControls.quadrants;
+    const gridLook = gridStyle(settings.look);
+    const boidLook = boidStyle(settings.look);
+
+    const reach = pushing ? cursorRadius(settings) : 0;
+    let cursorRing: CursorRing | null = null;
+    if (reach > 0) {
+      ring.x = cursor.x;
+      ring.y = cursor.y;
+      ring.radius = reach;
+      cursorRing = ring;
+    }
+
+    // At most one of these is ever set: the digits drive one preset list at a
+    // time, and `b` says which.
+    const gridPanes = styleKeys.gridQuadrants;
+    const boidPanes = styleKeys.boidQuadrants;
     const panes = gridPanes ?? boidPanes;
 
     if (panes) {
@@ -387,22 +431,16 @@ export function createApp(
         rect.height = heights[Math.floor(i / 2)];
         // The grid is opaque and covers its rect, so it goes under the boids
         // in every pane rather than once for the whole frame.
-        grid.draw(camera, pixelRatio, gridPanes?.[i].style ?? controls.style, rect);
-        boids.draw(
-          scene.target,
-          camera,
-          pixelRatio,
-          boidPanes?.[i].style ?? boidControls.style,
-          rect,
-        );
+        grid.draw(camera, pixelRatio, gridPanes?.[i].style ?? gridLook, rect, cursorRing);
+        boids.draw(target, camera, pixelRatio, boidPanes?.[i].style ?? boidLook, rect);
       }
     } else {
       rect.x = 0;
       rect.y = 0;
       rect.width = deviceWidth;
       rect.height = deviceHeight;
-      grid.draw(camera, pixelRatio, controls.style, rect);
-      boids.draw(scene.target, camera, pixelRatio, boidControls.style, rect);
+      grid.draw(camera, pixelRatio, gridLook, rect, cursorRing);
+      boids.draw(target, camera, pixelRatio, boidLook, rect);
     }
     // The draws leave their last quadrant as the viewport; hand the full buffer
     // back for whatever comes next.
@@ -411,13 +449,15 @@ export function createApp(
     overlay.draw({
       camera,
       cursor: cursorOverCanvas ? cursor : null,
-      style: gridPanes ? gridPanes[0].style : controls.style,
+      cursorMode: pushing ? settings.cursor.mode : '',
+      follow: settings.camera.follow,
+      style: gridPanes ? gridPanes[0].style : gridLook,
       boid: {
-        styleName: (boidPanes ? boidPanes[0].style : boidControls.style).name,
-        count: scene.feed.count,
+        styleName: (boidPanes ? boidPanes[0].style : boidLook).name,
+        count: feed.count,
       },
       quadrants: panes ? panes.map((pane) => pane.caption) : null,
-      help: boidControls.focused ? boidControls.help : `${controls.help} · ${boidControls.hint}`,
+      help: `${cameraControl.help} · ${styleKeys.help}`,
       stats: stats.current,
     });
 
@@ -426,14 +466,16 @@ export function createApp(
 
   return {
     camera,
-    simulation: live.simulation,
-    feed: live.feed,
+    simulation: simulation,
+    feed: feed,
+    settings,
 
-    setParams: applyParams,
+    apply,
 
-    reset(seed: number): void {
-      live.simulation.reset(seed);
-      live.trails.seed(0, live.simulation.capacity);
+    reset(nextSeed: number): void {
+      seed = nextSeed;
+      simulation.reset(seed);
+      trails.seed(0, simulation.capacity);
     },
 
     start(): void {
@@ -452,14 +494,18 @@ export function createApp(
 
     dispose(): void {
       this.stop();
+      onPageHide();
+      window.removeEventListener('pagehide', onPageHide);
       sceneElement.removeEventListener('pointermove', onPointerMove);
       sceneElement.removeEventListener('pointerleave', onPointerLeave);
       stopWatchingSize();
-      controls.dispose();
-      boidControls.dispose();
+      styleKeys.dispose();
+      panel?.dispose();
+      cameraControl.dispose();
       overlay.dispose();
-      design.dispose();
-      live.dispose();
+      target.dispose();
+      trails.dispose();
+      feed.dispose();
       boids.dispose();
       grid.dispose();
       surface.dispose();

@@ -44,14 +44,40 @@ const UNIFORM_NAMES = [
   'uOriginMarker',
   'uOriginRadius',
   'uOriginBoost',
+  'uCursorOffset',
+  'uCursorRadius',
+  'uCursorBoost',
 ] as const;
+
+/**
+ * Where the cursor force reaches, in world units, or null for no ring.
+ *
+ * The grid draws it because PLAN.md asks for the radius to be drawn on the
+ * grid, and because the grid is already the thing that can draw a circle of an
+ * exact world radius crisply at any zoom. It costs one branch in a shader that
+ * was running anyway -- a separate pass would need blending turned back on,
+ * which `boids.ts` deliberately leaves off.
+ */
+export interface CursorRing {
+  /** World position of the pointer. */
+  readonly x: number;
+  readonly y: number;
+  /** World units. */
+  readonly radius: number;
+}
 
 export interface GridRenderer {
   /**
    * Draws the grid over `rect`, which is left as the current GL viewport.
    * Opaque, and covers every pixel of the rect, so it needs no clear under it.
    */
-  draw(camera: Camera, pixelRatio: number, style: Readonly<GridStyle>, rect: ViewportRect): void;
+  draw(
+    camera: Camera,
+    pixelRatio: number,
+    style: Readonly<GridStyle>,
+    rect: ViewportRect,
+    cursor: CursorRing | null,
+  ): void;
   /** The decades drawn by the last call, finest first. Valid for labelling. */
   readonly bands: readonly GridBand[];
   readonly bandCount: number;
@@ -83,7 +109,7 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       return liveBands;
     },
 
-    draw(camera, pixelRatio, style, rect): void {
+    draw(camera, pixelRatio, style, rect, cursor): void {
       // Band selection works in CSS pixels, because that is the unit the style
       // is written in and what makes the grid look equally dense on a 1x
       // display and a Retina one. Only the upload converts to device pixels.
@@ -124,6 +150,19 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       gl.uniform1i(uniforms.uOriginMarker, ORIGIN_MARKER_CODES[style.origin]);
       gl.uniform1f(uniforms.uOriginRadius, style.originRadius * pixelRatio);
       gl.uniform1f(uniforms.uOriginBoost, style.originBoost);
+
+      // World units, so the ring grows and shrinks with the zoom rather than
+      // staying a fixed circle on screen: it is a distance in the flock's
+      // world, and it has to read as one. The offset is small whatever the
+      // camera is looking at, because the pointer is on screen by definition.
+      const radius = cursor ? cursor.radius * devicePixelsPerUnit : 0;
+      gl.uniform2f(
+        uniforms.uCursorOffset,
+        cursor ? (cursor.x - camera.center.x) * devicePixelsPerUnit : 0,
+        cursor ? (cursor.y - camera.center.y) * devicePixelsPerUnit : 0,
+      );
+      gl.uniform1f(uniforms.uCursorRadius, radius);
+      gl.uniform1f(uniforms.uCursorBoost, style.cursorBoost);
 
       draw(gl, vao, gl.TRIANGLES, 3);
     },

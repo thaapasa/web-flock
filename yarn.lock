@@ -315,6 +315,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tweakpane/core@npm:^2.0.5":
+  version: 2.0.5
+  resolution: "@tweakpane/core@npm:2.0.5"
+  checksum: 10c0/c4955de0739f64ed9ef146972e38392de6a88ebb3657f05027d3184f976254b0895cba84f9adce4b80230ea33e86918ab1fe8e136f6cf5f45f23c23fd8dc3a80
+  languageName: node
+  linkType: hard
+
 "@types/chai@npm:^5.2.2":
   version: 5.2.3
   resolution: "@types/chai@npm:5.2.3"
@@ -1516,6 +1523,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"tweakpane@npm:^4.0.5":
+  version: 4.0.5
+  resolution: "tweakpane@npm:4.0.5"
+  checksum: 10c0/c2058c1b1747f95db2227e274c879728fa828894af000c48f5206259ef4e5d1369ab553b82ce31cf62e396dc40707df96bed7cc0d105a89dcc1718bef2900e1f
+  languageName: node
+  linkType: hard
+
 "type-check@npm:^0.4.0, type-check@npm:~0.4.0":
   version: 0.4.0
   resolution: "type-check@npm:0.4.0"
@@ -1699,10 +1713,12 @@ __metadata:
   resolution: "web-flock@workspace:."
   dependencies:
     "@eslint/js": "npm:^10.0.1"
+    "@tweakpane/core": "npm:^2.0.5"
     eslint: "npm:^10.10.0"
     eslint-plugin-simple-import-sort: "npm:^14.0.0"
     globals: "npm:^17.12.0"
     prettier: "npm:^3.9.8"
+    tweakpane: "npm:^4.0.5"
     typescript: "npm:^5.9.0"
     typescript-eslint: "npm:^8.70.0"
     vite: "npm:^8.3.0"

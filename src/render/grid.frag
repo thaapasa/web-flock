@@ -27,6 +27,24 @@ uniform int uOriginMarker;
 uniform float uOriginRadius;
 uniform float uOriginBoost;
 
+/**
+ * The cursor force's reach, as device pixels from the camera centre and a
+ * device-pixel radius.
+ *
+ * PLAN.md asks for the radius to be drawn "on the grid", and this is that
+ * literally: the same colour, the same width, the same box filter as every
+ * other line, replacing what is under it rather than adding to it. The ring is
+ * the exact boundary of the force -- the falloff in flock.ts reaches zero at
+ * the rim and nothing leaks past it -- so the circle says precisely what it
+ * claims to.
+ *
+ * A radius of 0 draws nothing, which is how the `nothing` cursor mode and a
+ * pointer that has left the canvas both turn it off.
+ */
+uniform vec2 uCursorOffset;
+uniform float uCursorRadius;
+uniform float uCursorBoost;
+
 out vec4 fragColour;
 
 /**
@@ -40,8 +58,12 @@ float lineCoverage(float d, float w) {
   return clamp(w * 0.5 + 0.5 - d, 0.0, min(w, 1.0));
 }
 
+float ringCoverage(vec2 d, float radius, float width) {
+  return lineCoverage(abs(length(d) - radius), width);
+}
+
 float markerCoverage(vec2 d, float radius, float width, int marker) {
-  if (marker == 1) return lineCoverage(abs(length(d) - radius), width);
+  if (marker == 1) return ringCoverage(d, radius, width);
   if (marker == 2) return clamp(radius + 0.5 - length(d), 0.0, 1.0);
   if (marker == 3) {
     float across = lineCoverage(d.y, width) * clamp(radius + 0.5 - d.x, 0.0, 1.0);
@@ -82,6 +104,12 @@ void main() {
 
   float marker = markerCoverage(fromOrigin, uOriginRadius, uLineWidth, uOriginMarker);
   colour = mix(colour, uLineColour * min(1.0, uBrightness * uOriginBoost), marker);
+
+  // Last, so the ring stays readable wherever it crosses a line or an axis.
+  if (uCursorRadius > 0.0) {
+    float ring = ringCoverage(rel - uCursorOffset, uCursorRadius, uLineWidth);
+    colour = mix(colour, uLineColour * min(1.0, uBrightness * uCursorBoost), ring);
+  }
 
   fragColour = vec4(colour, 1.0);
 }

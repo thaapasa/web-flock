@@ -6,10 +6,25 @@
  * which list, which one is selected, which four are on screen — so it lives
  * here rather than being written out once per subsystem.
  *
- * **Deleted with the rest of `dev/` once the taste calls are settled.**
+ * **The selection is not kept here.** Step 5 put every preset in the panel, so
+ * the settings own which one is current and this reads and writes them through
+ * a {@link PresetBinding}. Two places remembering a selection would be two
+ * places to disagree, and the one that lost would be whichever the user had
+ * just touched.
+ *
+ * **Deleted with the rest of `dev/` once the taste calls are settled** — which
+ * is 7b, not now: 7a revisits the boid presets against a tuned flock and 7b
+ * revisits all of them against the finished renderer.
  */
 
 const QUADRANTS = 4;
+
+/** Where the current selection actually lives. See the file comment. */
+export interface PresetBinding {
+  /** Name of the selected preset. An unknown name selects the first. */
+  get(): string;
+  set(name: string): void;
+}
 
 /** One pane of comparison mode. */
 export interface QuadrantView<TStyle> {
@@ -24,8 +39,6 @@ export interface QuadrantView<TStyle> {
 }
 
 export interface PresetSelection<TStyle> {
-  /** The style to draw an ordinary frame with. */
-  readonly style: TStyle;
   /** Four panes in reading order while comparing; null otherwise. */
   readonly quadrants: readonly QuadrantView<TStyle>[] | null;
   readonly comparing: boolean;
@@ -37,17 +50,18 @@ export interface PresetSelection<TStyle> {
 
 export function createPresetSelection<TStyle extends { readonly name: string }>(
   presets: readonly TStyle[],
+  binding: PresetBinding,
 ): PresetSelection<TStyle> {
-  let index = 0;
   let comparing = false;
   /** Index of the first of the four presets on screen while comparing. */
   let from = 0;
 
-  return {
-    get style() {
-      return presets[index];
-    },
+  const selected = (): number => {
+    const at = presets.findIndex((preset) => preset.name === binding.get());
+    return at < 0 ? 0 : at;
+  };
 
+  return {
     get comparing() {
       return comparing;
     },
@@ -73,7 +87,7 @@ export function createPresetSelection<TStyle extends { readonly name: string }>(
         // A digit means the same thing in both modes: that preset, full screen.
         // While comparing, the captions carry these same numbers, so a look
         // turns into a choice without leaving the mode first.
-        index = at;
+        binding.set(presets[at].name);
         comparing = false;
         return true;
       }
@@ -81,7 +95,7 @@ export function createPresetSelection<TStyle extends { readonly name: string }>(
       switch (key) {
         case 'c':
           comparing = !comparing;
-          if (comparing) from = index;
+          if (comparing) from = selected();
           return true;
         // One preset at a time, not four: the window slides through the list so
         // any four neighbours can be seen together, rather than dealing the

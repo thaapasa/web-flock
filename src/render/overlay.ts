@@ -64,6 +64,21 @@ export interface OverlayFrame {
   camera: Camera;
   /** World-space cursor, or null when it is not over the canvas. */
   cursor: Readonly<Vec2> | null;
+  /**
+   * What the cursor is doing to the flock. Empty when it is doing nothing.
+   *
+   * Worth a word of its own because the ring on the grid says how far the force
+   * reaches but not which way it pushes, and a predator and an attractor draw
+   * exactly the same circle.
+   */
+  cursorMode: string;
+  /**
+   * Whether the camera is tracking the flock.
+   *
+   * It rides on the centre line rather than taking one of its own: what it says
+   * about is what that line is showing.
+   */
+  follow: boolean;
   style: Readonly<GridStyle>;
   /** Null when nothing is drawing boids, which hides the line. */
   boid: BoidReadout | null;
@@ -182,9 +197,11 @@ export function createOverlay(
     const decimals = clamp(Math.ceil(Math.log10(camera.scale)) + 1, 0, 6);
     const gridExponent = Math.ceil(Math.log10(options.minSpacing / camera.scale));
 
+    const at = cursor ? `${cursor.x.toFixed(decimals)}, ${cursor.y.toFixed(decimals)}` : '—';
     const lines = [
-      cursor ? `cursor  ${cursor.x.toFixed(decimals)}, ${cursor.y.toFixed(decimals)}` : 'cursor  —',
-      `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}`,
+      `cursor  ${at}${frame.cursorMode ? ` · ${frame.cursorMode}` : ''}`,
+      `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}` +
+        `${frame.follow ? ' · follow' : ' · free'}`,
       `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
       `style   ${frame.style.name}`,
       ...(frame.boid ? [`boid    ${frame.boid.styleName}`] : []),
@@ -349,7 +366,7 @@ function trimZeros(text: string): string {
 }
 
 /** Reads as "how much world is a pixel", which is the useful direction. */
-function formatScale(pixelsPerUnit: number): string {
+export function formatScale(pixelsPerUnit: number): string {
   if (pixelsPerUnit >= 1) return `${trimZeros(pixelsPerUnit.toPrecision(3))} px/u`;
   return `${trimZeros((1 / pixelsPerUnit).toPrecision(3))} u/px`;
 }

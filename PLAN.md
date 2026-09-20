@@ -313,7 +313,7 @@ a knob moves between rows.
 Left unmeasured: the Ryzen desktop. The expectation is that it is faster on this workload, which is
 single-threaded and scalar, but nothing here has checked.
 
-### 5. Controls — Review (panel contents: Collaborate)
+### 5. Controls — Review (panel contents: Collaborate) — done
 
 Parameter panel, zoom input, cursor force.
 
@@ -330,6 +330,73 @@ Parameter panel, zoom input, cursor force.
 Slider **ranges** matter more than the code — a range that is mostly dead zone makes the simulation
 feel broken when it is not. Ranges get revised in 7a, once there is something to tune against.
 
+Done, and PLAN.md is wrong about two of the five bullets above. Both are recorded here rather than
+edited away, because finding out what they cost is the useful part.
+
+**The framing percentage does not work without step 6.** It was built exactly as specified — a
+percentage of how much room the flock gets, `camera.logScale` derived every frame from it and from
+the flock's 85%-quantile reach — and it hunts. The reach moves a little every step, so the scale
+moved a little every frame, and the grid, whose whole job is to make a change of scale something you
+watch happen, turned that into a permanent shimmer. Nothing was wrong with the measurement, and no
+amount of tuning the percentage would have helped: it was the derivation running _continuously_ that
+could not work. The missing piece is a band the flock can move inside without the camera reacting at
+all, which is step 6's hysteresis. So the idea moves there, and step 5 holds a zoom instead — a
+number the camera keeps until the wheel, a key or a fit changes it. `camera/framing.ts` keeps the
+quantile, the reach and the fit, called once by `z` rather than every frame, and step 6 inherits
+them.
+
+**Manual pan came back, behind a `follow` checkbox.** The second half of that bullet still holds —
+nothing ever disengages follow behind your back, so there is no state to be surprised by — but
+watching the flock leave turned out to be worth having, and the origin spring means it cannot be
+lost for good. `z` and a panel button bring it back: centre and zoom to fit, one shot.
+
+Then the parts that went as planned.
+
+**The panel binds to one settings object and mutates it in place**, so the wheel and the preset keys
+write where the panel reads and there is no copy to fall out of step. It is deliberately not
+`SimParams`. The cursor is a mode plus a magnitude rather than one signed number, because "off" as a
+particular point in the middle of a slider is not a control anyone can find — and `nothing` being a
+mode is what turns the ring off as well. The look is preset _names_ plus the overrides on top, never
+a resolved style: a saved style would freeze a copy of whatever the preset said that day, and 7b's
+retuning would never reach a browser that had one.
+
+**Persistence validates every field on the way in.** The blob comes from a store the user can edit,
+from an older build, or from a newer one rolled back, so a `NaN` speed or a preset name that no
+longer exists is an ordinary case rather than an attack. Each bad field falls back on its own, so
+one of them does not cost the whole set. Storage sits behind an interface for two reasons: the tests
+run in node with no DOM, and `localStorage` throws rather than failing quietly in private mode and
+wherever site data is blocked — so a refused store degrades to running without persistence instead
+of refusing to start.
+
+**The cursor ring is drawn by the grid**, as three uniforms and a `ringCoverage` that the origin
+marker now shares — the same colour, the same width, the same box filter, composited by the same
+replace. Its radius is in world units, so it grows with the zoom, and since the force's falloff
+reaches zero exactly at the rim with nothing leaking past it, the circle is the true boundary rather
+than an indication of one. It costs a branch in a shader that was running anyway; a separate pass
+would have needed blending turned back on, which `boids.ts` deliberately leaves off.
+
+**`dev/` shrank to what later steps still ask for.** `grid-controls.ts` and `boid-controls.ts` are
+gone, and every key the panel absorbed with them. What is left is comparison mode and the readings
+log, and `compare.ts` no longer owns a selection — it reads and writes the settings through a
+binding, because two places remembering which preset is current is two places to disagree.
+
+**Step 4a's design harness went with them.** `pose-track.ts` said at the top of itself that it was
+deleted in step 5; 4a kept it past that, and this is where the claim comes due. It had also quietly
+stopped working, which is worth recording because nothing announced it: the specimens fly paths a
+couple of hundred world units across while `DESIGN_LOG_SCALE` opens at twenty pixels per unit, so
+`d` parked the camera at a path's centre with the boid orbiting five thousand pixels away. In 4a
+that was survivable because the wheel and the drag were always live and you zoomed out until you
+found it. Step 5 took the camera away inside the harness, and the mismatch became an empty grid. The
+paths are sized for watching a trail bend and the zoom for judging a stroke weight, and one zoom
+cannot serve both — so if 7b wants specimens again it wants two views, not the one this had.
+Deleting it also takes the two-scene machinery out of `app.ts`: the `Scene` interface, the swap, and
+the trail re-seed a swap needed.
+
+Slider ranges are wide rather than right. PLAN.md says they are revised in 7a and they have not been
+touched since: they are set to find the interesting region, not to live in. One addition alongside
+them, a `restart` button next to `spawnRadius`, because that parameter can only bite on a re-seed
+and an inert slider is worse than no slider — and 7a wants a seeded restart for A/B anyway.
+
 ### 6. Camera behaviour — Collaborate
 
 Auto-follow and auto-zoom, damped.
@@ -340,6 +407,9 @@ Auto-follow and auto-zoom, damped.
   edge the camera follows, then holds that position when they turn back, until they have crossed to
   the opposite edge. Same for zoom, with its own tolerance band
 - Separate time constants for pan and zoom, zoom noticeably lazier
+- **The framing percentage lands here**, not in step 5. A zoom derived continuously from the flock's
+  reach shimmers without a tolerance band under it — see step 5. `camera/framing.ts` already has the
+  quantile, the reach and the fit; what it is missing is the hysteresis below them
 
 Most likely step to be quietly bad: every piece is easy, the composite is a feel problem. Coupled to
 step 3 — camera zoom drives the grid's LOD, so a camera that hunts makes the grid pulse between

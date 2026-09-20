@@ -94,6 +94,18 @@ export interface GridStyle {
   readonly originRadius: number;
   /** As {@link axisBoost}, for the origin marker. */
   readonly originBoost: number;
+
+  /**
+   * As {@link axisBoost}, for the ring that shows how far the cursor force
+   * reaches.
+   *
+   * The ring is a control's affordance rather than part of the grid, but it is
+   * drawn in the grid's ink and at the grid's width, so what it is allowed to
+   * say is the same kind of decision as the axes' -- and it belongs with them
+   * where 7b can find it. Kept close to 1: a ring that shouted would be a
+   * heavier mark than the thing it is measuring.
+   */
+  readonly cursorBoost: number;
 }
 
 const CYAN: RGB = [0.55, 0.85, 1.0];
@@ -113,6 +125,8 @@ function preset(overrides: Partial<GridStyle> & { name: string }): Readonly<Grid
     origin: 'none',
     originRadius: 4,
     originBoost: 1.5,
+
+    cursorBoost: 1.15,
 
     ...overrides,
   } satisfies GridStyle);

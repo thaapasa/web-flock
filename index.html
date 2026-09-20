@@ -24,11 +24,25 @@
       #overlay {
         pointer-events: none;
       }
+      /*
+        The parameter panel sits top-left, over both canvases. The other three
+        corners are spoken for: the frame-time HUD top-right, the coordinate
+        readout bottom-right, the key hints bottom-left. It starts collapsed to
+        its title bar, so what a stranger sees first is the flock.
+      */
+      #panel {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        width: 280px;
+        z-index: 1;
+      }
     </style>
   </head>
   <body>
     <canvas id="scene"></canvas>
     <canvas id="overlay"></canvas>
+    <div id="panel"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
