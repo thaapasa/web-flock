@@ -254,7 +254,7 @@ Left open on purpose, for 4b: additive blending has never been seen with a crowd
 `separationRadius` 6 against a 5-unit mark the boids fly close enough that trails will cross
 constantly. Whether the mark survives that is not a question six specimens can answer.
 
-### 4b. Render five thousand — Review
+### 4b. Render five thousand — Review — done
 
 Instancing, buffer plumbing, one draw call.
 
@@ -263,6 +263,55 @@ Instancing, buffer plumbing, one draw call.
   strictly constant screen size
 - The frame-time HUD and a boid-count slider land here, not in step 8, so performance is visible the
   whole way through
+
+Done, and one correction to the above: it is **two** draw calls, the ribbons and then the marks.
+Different geometry, not mergeable. Instancing, the buffer plumbing and the minimum-size clamp all
+arrived with 4a; what 4b added was capacity for five thousand, a count ladder on `n`/`m`, and the
+keys that turn a look into a number — `z` to frame the flock, `t` to drop the trails, `p` to write
+the HUD to the console.
+
+**Five thousand boids hold 164.9 fps with 6.1 ms frames on the M1 Max**, which is the plan's second
+success criterion met with room to spare. Getting there took no optimization code at all, and that
+is the whole story of this step.
+
+The first reading was a cliff rather than a curve: comfortable to 3,500, then 17 fps at 5,000. The
+cause is the fixed timestep. The simulation owes 120 steps per second of real time whatever the
+display does, so a step has to finish inside 8.33 ms simply to keep up; at 5,000 it took 11.5 ms,
+the accumulator ran away to the five-step cap, and a 1.8x cost increase became a 10x frame time
+increase. `t` ruled the GPU out immediately — 57.7 ms of a 58.3 ms frame was inside `step`.
+
+The lever was not any of the ones step 8 predicted. Cost scales with how many neighbours each boid
+has, and a flock held by a spring packs tighter as it grows, so density rose with count and the
+search went quadratic. **Spreading the flock fixes it at the root**: `separationRadius` 6 to 12
+dropped the density band from 199 to 43 and the step from 11.5 ms to 4.0 ms, and cost went from
+quadratic to near-linear — ten times the boids for nineteen times the work, where it had been forty.
+No per-cell cap, no smaller neighbour radius, no 60 Hz timestep.
+
+That the same change was wanted on sight is the part worth keeping. 4a had already noticed the boids
+flew nose to tail at a separation of 6 against a five-unit mark; the looks problem and the
+performance problem were one problem, and `separationRadius: 12` is now the only value in
+`sim/params.ts` that is an answer rather than a starting point.
+
+Blending stays additive, judged against a real crowd. Zooming out turned out to be a way of _making_
+light — the mark stops shrinking at its floor while the boids keep converging on screen, so the same
+brightness lands in fewer pixels and additive sums it into a white blob. `floorFade` dims a boid by
+how far below the floor it should have been, which is the grid's box filter argument applied to a
+whole mark: at 1 it dims with length, at 2 with area. 1 by eye. It under-compensates by one power,
+so a hard enough zoom-out still blooms — left for 7b rather than chased here.
+
+Two things this step corrected about earlier notes. Step 2 claimed the sandbox benchmarks roughly
+15x slower than real hardware on a calibration loop; measured against the M1 Max on the real
+workload it is within 30%, so numbers produced here are predictive and were treated as such for the
+rest of the step. And step 8's predicted failure — the spatial hash degrading toward O(n^2) as the
+flock compresses — did happen, but the fix it names was not needed, because the compression was a
+tuning artefact rather than a property of the index.
+
+`dev/readings.ts` outlives the rest of `dev/`. Steps 6, 7a and 8 all ask questions only the user can
+answer, and each reading carries the settings it was taken under so a log of them stays honest when
+a knob moves between rows.
+
+Left unmeasured: the Ryzen desktop. The expectation is that it is faster on this workload, which is
+single-threaded and scalar, but nothing here has checked.
 
 ### 5. Controls — Review (panel contents: Collaborate)
 

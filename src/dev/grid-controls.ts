@@ -33,8 +33,8 @@ import { createPresetSelection } from './compare';
 const WHEEL_SENSITIVITY = 0.0016;
 /** Decades per keypress, for stepping through a handover frame by frame. */
 const KEY_ZOOM_STEP = 0.05;
-const MIN_LOG_SCALE = -3;
-const MAX_LOG_SCALE = 3;
+export const MIN_LOG_SCALE = -3;
+export const MAX_LOG_SCALE = 3;
 
 export interface GridControls {
   /** The style to draw an ordinary frame with. */

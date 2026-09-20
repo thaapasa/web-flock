@@ -7,6 +7,7 @@ import {
   colourBand,
   colourFraction,
   DEFAULT_BOID_STYLE,
+  floorBrightness,
   markLength,
   trailSamples,
 } from './boid-style';
@@ -75,6 +76,46 @@ describe('mark length', () => {
       expect(markLength(style, 10 ** logScale)).toBeGreaterThanOrEqual(3.5);
     }
     expect(markLength(style, 1e-9)).toBe(3.5);
+  });
+});
+
+describe('the size floor', () => {
+  /**
+   * The floor stops the mark shrinking, but the boids keep converging on
+   * screen. Without dimming what the floor holds up, zooming out is a way of
+   * making light, and additive blending piles it into a white blob.
+   */
+  it('leaves a mark alone while it is above the floor', () => {
+    const style = withStyle({ size: 5, minScreenSize: 3.5, floorFade: 1 });
+    expect(floorBrightness(style, 1)).toBe(1);
+    expect(floorBrightness(style, 0.7)).toBe(1);
+  });
+
+  it('dims in proportion once the floor is holding it up', () => {
+    const style = withStyle({ size: 5, minScreenSize: 3.5, floorFade: 1 });
+    // Half the length it wanted, so half the brightness.
+    expect(floorBrightness(style, 0.35)).toBeCloseTo(0.5, 10);
+    expect(floorBrightness(style, 0.14)).toBeCloseTo(0.2, 10);
+  });
+
+  it('dims with the area when asked to', () => {
+    const style = withStyle({ size: 5, minScreenSize: 3.5, floorFade: 2 });
+    expect(floorBrightness(style, 0.35)).toBeCloseTo(0.25, 10);
+  });
+
+  it('leaves everything alone when the fade is off', () => {
+    const style = withStyle({ size: 5, minScreenSize: 3.5, floorFade: 0 });
+    expect(floorBrightness(style, 1e-6)).toBe(1);
+  });
+
+  it('never brightens a boid, at any zoom or exponent', () => {
+    for (const style of BOID_PRESETS) {
+      for (let logScale = -6; logScale <= 3; logScale += 0.25) {
+        const fade = floorBrightness(style, 10 ** logScale);
+        expect(fade).toBeGreaterThanOrEqual(0);
+        expect(fade).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });
 

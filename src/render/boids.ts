@@ -7,6 +7,7 @@ import type { BoidStyle } from './boid-style';
 import {
   COLOUR_INPUT_CODES,
   colourBand,
+  floorBrightness,
   markLength,
   strokeWidth,
   TRAIL_COLOUR_CODES,
@@ -179,6 +180,8 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       const lineWidth = strokeWidth(style, lengthCss) * pixelRatio;
       const trailWidth = lineWidth * style.trailWidth;
       const [low, high] = colourBand(style, target.ranges);
+      // What the floor is holding up, given back as brightness. See floorFade.
+      const brightness = style.brightness * floorBrightness(style, camera.scale);
       const colourMode = COLOUR_INPUT_CODES[style.colourBy];
 
       buildTransform(camera, pixelRatio, rect);
@@ -210,7 +213,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
         gl.uniform1f(trailUniforms.uInset, length * 0.5);
         gl.uniform1f(trailUniforms.uTaper, style.trailTaper);
         gl.uniform1f(trailUniforms.uFalloff, style.trailFalloff);
-        gl.uniform1f(trailUniforms.uBrightness, style.brightness * style.trailBrightness);
+        gl.uniform1f(trailUniforms.uBrightness, brightness * style.trailBrightness);
 
         gl.uniform1i(trailUniforms.uColourMode, colourMode);
         gl.uniform1i(trailUniforms.uTrailColour, TRAIL_COLOUR_CODES[style.trailColour]);
@@ -233,7 +236,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       gl.uniform1f(uniforms.uPad, lineWidth * 0.5 + 1);
       gl.uniform1f(uniforms.uLineWidth, lineWidth);
 
-      gl.uniform1f(uniforms.uBrightness, style.brightness);
+      gl.uniform1f(uniforms.uBrightness, brightness);
 
       gl.uniform1i(uniforms.uColourMode, colourMode);
       gl.uniform2f(uniforms.uRange, low, high);

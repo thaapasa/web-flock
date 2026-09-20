@@ -12,7 +12,17 @@ export interface SimParams {
   /** How many boids are simulated. Never exceeds the backend's capacity. */
   count: number;
 
-  /** Boids closer than this push each other apart. World units. */
+  /**
+   * Boids closer than this push each other apart. World units.
+   *
+   * Chosen by eye in 4b, and the one parameter in this file that is not just a
+   * starting point. At 6 against a five-unit mark the flock flew nose to tail
+   * and every trail crossed every other; at 12 they are close without
+   * overlapping. It is also what made five thousand boids affordable — a
+   * looser flock is a thinner one, and the neighbour search costs the square
+   * of how many neighbours there are. Density band 199 to 43, and the step
+   * from 11.5 ms to 4.0 ms.
+   */
   separationRadius: number;
   /** Neighbourhood radius for alignment and cohesion. World units. */
   neighbourRadius: number;
@@ -75,7 +85,7 @@ export interface SimParams {
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
 
-  separationRadius: 6,
+  separationRadius: 12,
   neighbourRadius: 24,
   fieldOfView: (Math.PI * 2) / 3,
 

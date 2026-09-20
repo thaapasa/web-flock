@@ -105,9 +105,23 @@ export interface BoidStyle {
   /**
    * Floor on that length in CSS pixels, so a flock seen from far away thins
    * into a texture instead of vanishing. There is deliberately no ceiling:
-   * zooming in is how 4a gets a boid big enough to judge.
+   * zooming in is how 4a got a boid big enough to judge.
    */
   readonly minScreenSize: number;
+  /**
+   * How hard a boid dims once it has hit {@link minScreenSize}, as an exponent
+   * on how far below the floor it should have been. 0 leaves it at full
+   * brightness, 1 dims with its length, 2 with its area.
+   *
+   * Without this, zooming out is a way of making light: the mark stops
+   * shrinking while the boids keep converging on screen, so the same
+   * brightness lands in fewer and fewer pixels and additive blending sums it
+   * into a white blob. Dimming what the floor is holding up keeps the total
+   * roughly constant, which is what makes a distant flock read as a texture
+   * rather than as a lamp. The same argument as the grid's box filter, which
+   * lets a sub-pixel line fade rather than fattening it to a whole one.
+   */
+  readonly floorFade: number;
   /**
    * Angle between an arm and the backward axis, in radians. Small is a dart,
    * large is a wide V. The mark's length does not change with it — the arms
@@ -164,6 +178,7 @@ function preset(
   return Object.freeze({
     size: 5,
     minScreenSize: 3.5,
+    floorFade: 1,
     halfAngle: 0.42,
     lineWidth: 1.4,
 
@@ -245,6 +260,17 @@ export function markLength(style: Readonly<BoidStyle>, pixelsPerUnit: number): n
  * which is what the box filter is for.
  */
 const MIN_STROKES_PER_MARK = 4;
+
+/**
+ * How much of its brightness a boid keeps once the floor is holding its size
+ * up. 1 above the floor, falling away below it. See {@link BoidStyle.floorFade}.
+ */
+export function floorBrightness(style: Readonly<BoidStyle>, pixelsPerUnit: number): number {
+  if (style.floorFade <= 0) return 1;
+  const wanted = style.size * pixelsPerUnit;
+  if (wanted >= style.minScreenSize) return 1;
+  return (wanted / style.minScreenSize) ** style.floorFade;
+}
 
 /**
  * The stroke a mark of this length is drawn with, in the same unit.

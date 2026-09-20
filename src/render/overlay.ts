@@ -55,6 +55,8 @@ export const DEFAULT_OVERLAY_OPTIONS: OverlayOptions = {
 /** What the readout says about the boids. Null before anything draws them. */
 export interface BoidReadout {
   readonly styleName: string;
+  /** Drawn with the frame time rather than with the style: it is what the
+      frame time costs. */
   readonly count: number;
 }
 
@@ -185,7 +187,7 @@ export function createOverlay(
       `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}`,
       `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
       `style   ${frame.style.name}`,
-      ...(frame.boid ? [`boid    ${frame.boid.styleName} · ${frame.boid.count}`] : []),
+      ...(frame.boid ? [`boid    ${frame.boid.styleName}`] : []),
     ];
 
     ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
@@ -244,6 +246,7 @@ export function createOverlay(
       `${stats.fps.toFixed(0).padStart(3)} fps${stats.behind ? '  behind' : ''}`,
       `frame ${stats.frameMs.toFixed(1)} ms   worst ${stats.worstFrameMs.toFixed(1)}`,
       `sim   ${stats.simMs.toFixed(1)} ms   ×${stats.steps}`,
+      ...(frame.boid ? [`boids ${frame.boid.count}`] : []),
     ];
 
     ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;

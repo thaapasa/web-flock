@@ -1,7 +1,8 @@
 import { Camera } from './camera/camera';
-import { createBoidControls } from './dev/boid-controls';
-import { createGridControls } from './dev/grid-controls';
+import { createBoidControls, TOP_OF_LADDER } from './dev/boid-controls';
+import { createGridControls, MAX_LOG_SCALE, MIN_LOG_SCALE } from './dev/grid-controls';
 import { createPoseTrack } from './dev/pose-track';
+import { createReadingLog, describeRenderer } from './dev/readings';
 import type { Vec2 } from './math/types';
 import type { BoidFeed } from './render/boid-feed';
 import { createUploadFeed } from './render/boid-feed';
@@ -70,8 +71,20 @@ const MAX_STEPS_PER_FRAME = 5;
  */
 const TRAIL_CAPTURE_STEPS = 4;
 
+/**
+ * Fraction of the flock `z` frames, and the room left around it.
+ *
+ * The quantile is step 6's: the tightest region holding most of the flock, so
+ * a single straggler halfway to the horizon cannot force a zoom-out. This is a
+ * one-shot version of it, with none of the damping or hysteresis that make
+ * step 6 hard — the camera does not follow anything yet, and a crowd you
+ * cannot find is a crowd you cannot review.
+ */
+const FRAME_QUANTILE = 0.85;
+const FRAME_MARGIN = 1.25;
+
 export interface AppOptions {
-  /** Upper bound on boid count; sizes the simulation's arrays. */
+  /** Upper bound on boid count; sizes the simulation's arrays once. */
   capacity?: number;
   params?: Readonly<SimParams>;
   seed?: number;
@@ -113,7 +126,10 @@ export function createApp(
   options: AppOptions = {},
 ): App {
   const params = options.params ?? DEFAULT_SIM_PARAMS;
-  const capacity = options.capacity ?? Math.max(1, Math.floor(params.count));
+  // Sized for the top of the ladder, not for the starting count: the arrays
+  // are allocated once and `n`/`m` must be able to reach 5,000 without a
+  // restart. All of it together is under two megabytes.
+  const capacity = options.capacity ?? Math.max(TOP_OF_LADDER, Math.floor(params.count));
 
   const surface = createResizingCanvas(sceneElement);
   const gl = getContext(sceneElement);
@@ -154,7 +170,98 @@ export function createApp(
   // comparison modes. Replaced by the real controls in step 5 — see `dev/`.
   // The boids' half is created first because it owns the switch that decides
   // which of the two the number keys belong to.
-  const boidControls = createBoidControls(camera);
+  const stats = createFrameStats();
+  let active: Scene = live;
+
+  /**
+   * The parameters as they stand. The count keys change one field of this and
+   * hand the whole thing back, because a parameter set is plain data — see
+   * `sim/params.ts`.
+   */
+  let currentParams: SimParams = { ...params };
+
+  const applyParams = (next: Readonly<SimParams>): void => {
+    currentParams = { ...next };
+    const before = live.simulation.count;
+    live.simulation.setParams(currentParams);
+    // New boids are placed beside boids already flying, so they have a present
+    // but no past; without this they arrive trailing whatever the last occupant
+    // of their slot was doing.
+    if (live.simulation.count > before) live.trails.seed(before, live.simulation.count);
+  };
+
+  const setCount = (count: number): void => {
+    applyParams({ ...currentParams, count });
+  };
+
+  // Not a restart: the boids keep flying and drift apart over the next few
+  // seconds, which is the only way to see what the spacing does to the look.
+  const setSeparation = (separationRadius: number): void => {
+    applyParams({ ...currentParams, separationRadius });
+  };
+
+  /** Puts the flock on screen. See FRAME_QUANTILE. */
+  const frameFlock = (): void => {
+    const { positions, count, centroid } = active.simulation.sample;
+    if (count === 0) return;
+
+    const radii = new Float64Array(count);
+    for (let i = 0; i < count; i++) {
+      const dx = positions[i * 2] - centroid.x;
+      const dy = positions[i * 2 + 1] - centroid.y;
+      radii[i] = Math.sqrt(dx * dx + dy * dy);
+    }
+    radii.sort();
+    const reach = Math.max(radii[Math.floor((count - 1) * FRAME_QUANTILE)], 1e-3);
+
+    camera.setCenter(centroid.x, centroid.y);
+    const half = Math.min(camera.viewportWidth, camera.viewportHeight) / 2;
+    const wanted = Math.log10(half / (reach * FRAME_MARGIN));
+    camera.logScale = Math.min(MAX_LOG_SCALE, Math.max(MIN_LOG_SCALE, wanted));
+  };
+
+  const readings = createReadingLog(describeRenderer(gl));
+
+  /** The HUD, as one block of text that survives being pasted. */
+  const dumpReadings = (): void => {
+    const stat = stats.current;
+    const { width, height, pixelRatio } = surface.size;
+    const style = boidControls.style;
+    const table = readings.add({
+      boids: active.feed.count,
+      trails: style.trail !== 'none',
+      fps: stat.fps,
+      frameMs: stat.frameMs,
+      worstMs: stat.worstFrameMs,
+      simMs: stat.simMs,
+      steps: stat.steps,
+      behind: stat.behind,
+      scale: camera.scale,
+      band: active.simulation.ranges.maxDensity,
+      settings: {
+        viewport: `${Math.round(width)}x${Math.round(height)} @${pixelRatio.toFixed(2)}x`,
+        style: style.name,
+        trailPoints: style.trailPoints,
+        blend: style.blend,
+        floorFade: style.floorFade,
+        neighbourRadius: currentParams.neighbourRadius,
+        separationRadius: currentParams.separationRadius,
+        minSpeed: currentParams.minSpeed,
+        maxSpeed: currentParams.maxSpeed,
+      },
+    });
+    // One string, not an object: a console renders an object as a tree that
+    // copies back as something nobody can read.
+    console.log(table);
+  };
+
+  const boidControls = createBoidControls(camera, {
+    setCount,
+    setSeparation,
+    frameFlock,
+    dumpReadings,
+    clearReadings: () => readings.clear(),
+  });
   const controls = createGridControls(
     sceneElement,
     camera,
@@ -193,8 +300,6 @@ export function createApp(
 
   gl.clearColor(0, 0, 0, 1);
 
-  const stats = createFrameStats();
-
   /** Reused each frame; the grid's rects are the only allocation-prone part. */
   const rect: ViewportRect = { x: 0, y: 0, width: 1, height: 1 };
 
@@ -203,7 +308,6 @@ export function createApp(
   let previous = 0;
   let accumulator = 0;
   let stepsSinceCapture = 0;
-  let active: Scene = live;
 
   const frame = (nowMs: number): void => {
     const now = nowMs / 1000;
@@ -325,14 +429,7 @@ export function createApp(
     simulation: live.simulation,
     feed: live.feed,
 
-    setParams(next: Readonly<SimParams>): void {
-      const before = live.simulation.count;
-      live.simulation.setParams(next);
-      // New boids are placed beside boids already flying, so they have a
-      // present but no past; without this they arrive trailing whatever the
-      // last occupant of their slot was doing.
-      if (live.simulation.count > before) live.trails.seed(before, live.simulation.count);
-    },
+    setParams: applyParams,
 
     reset(seed: number): void {
       live.simulation.reset(seed);

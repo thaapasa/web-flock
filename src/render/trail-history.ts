@@ -128,13 +128,16 @@ export function createUploadTrailHistory(
     },
 
     capture(): void {
+      const live = Math.min(width, simulation.count);
+      if (live === 0) return;
       newest = (newest + 1) % height;
-      // The whole row, live boids or not. Slots past `count` are not drawn, and
-      // a full-width upload is one call rather than a call that has to know how
-      // many boids there are this step.
-      gather(0, width);
+      // Only the boids that exist. Slots past `count` hold whatever their last
+      // occupant left, and nothing draws them until `seed` gives them a
+      // present — walking them here would be five thousand square roots a
+      // capture in a flock of two hundred and fifty.
+      gather(0, live);
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      upload(0, width, newest);
+      upload(0, live, newest);
       gl.bindTexture(gl.TEXTURE_2D, null);
     },
 
