@@ -12,8 +12,8 @@ import { fitLogScale, flockReach, FRAME_QUANTILE, stepZoom } from './framing';
  * out and this is not one. **Zoom** is a number the camera holds until the
  * wheel, a key or a fit changes it, and follow does not touch it at all.
  *
- * Zoom was briefly derived from the flock's spread, which is what PLAN.md asks
- * for, and it hunted: see `framing.ts`. A continuously derived zoom needs step
+ * Zoom was briefly derived from the flock's spread, as step 5 originally asked,
+ * and it hunted: see `framing.ts`. A continuously derived zoom needs step
  * 6's hysteresis under it, so what is here holds still instead.
  *
  * What is otherwise *not* here is step 6: this snaps. With follow on the centre

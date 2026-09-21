@@ -66,7 +66,7 @@ describe('mark length', () => {
   });
 
   /**
-   * PLAN.md's departure from constant screen size: the same mark throughout,
+   * The departure from a constant screen size: the same mark throughout,
    * never LOD, but a floor so a flock seen from far away thins into a texture
    * rather than disappearing.
    */

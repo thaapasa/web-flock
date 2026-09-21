@@ -244,8 +244,8 @@ export const DEFAULT_BOID_STYLE = BOID_PRESETS[0];
 /**
  * The mark's length on screen, in the same pixel unit as `pixelsPerUnit`.
  *
- * The floor is what PLAN.md calls for in 4b: the same mark throughout, never
- * LOD, but never so small it stops being a direction either.
+ * The floor keeps the mark the same throughout, never LOD, but never so small
+ * it stops being a direction either.
  */
 export function markLength(style: Readonly<BoidStyle>, pixelsPerUnit: number): number {
   return Math.max(style.minScreenSize, style.size * pixelsPerUnit);

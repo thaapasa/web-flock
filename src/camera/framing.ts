@@ -3,8 +3,8 @@ import type { FlockSample } from '../sim/simulation';
 /**
  * Putting the flock on screen, once.
  *
- * PLAN.md's step 5 asks for a wheel that adjusts a framing percentage rather
- * than a raw zoom — how much room the flock gets, recomputed from how far it
+ * Step 5 asked for a wheel that adjusts a framing percentage rather than a raw
+ * zoom — how much room the flock gets, recomputed from how far it
  * currently spreads. That was built and taken out again, and the reason is
  * worth keeping: **a zoom derived from a live measurement hunts.** The flock's
  * reach moves a little every step, so the scale moved a little every frame, and
