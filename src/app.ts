@@ -296,7 +296,8 @@ export function createApp(
   const frame = (nowMs: number): void => {
     const now = nowMs / 1000;
     const frameMs = (now - previous) * 1000;
-    accumulator += Math.min(now - previous, MAX_FRAME_TIME);
+    const dt = Math.min(now - previous, MAX_FRAME_TIME);
+    accumulator += dt;
     previous = now;
 
     // Re-projected every frame, not on the pointer event: the camera moves
@@ -331,7 +332,7 @@ export function createApp(
     stats.record(frameMs, simMs, steps, behind);
 
     // After the steps, so the camera frames where the flock is now.
-    cameraControl.apply();
+    cameraControl.apply(dt);
 
     // After the last step and before any draw; see BoidFeed.sync.
     feed.sync();

@@ -1,10 +1,17 @@
-import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
+import {
+  MAX_FRAME_LOG,
+  MAX_LOG_SCALE,
+  MAX_ZOOM_TAU,
+  MAX_ZOOM_TOLERANCE,
+  MIN_FRAME_LOG,
+  MIN_LOG_SCALE,
+} from '../camera/framing';
 import type { BlendMode, BoidStyle } from '../render/boid-style';
 import { BOID_PRESETS, DEFAULT_BOID_STYLE } from '../render/boid-style';
 import type { GridStyle } from '../render/grid-style';
 import { DEFAULT_GRID_STYLE, GRID_PRESETS } from '../render/grid-style';
 import type { LabelFormat, LabelPlacement } from '../render/overlay';
-import { DEFAULT_OVERLAY_OPTIONS } from '../render/overlay';
+import { DEFAULT_OVERLAY_OPTIONS, formatFramePercent } from '../render/overlay';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 
@@ -32,9 +39,20 @@ export interface CursorSettings {
 }
 
 export interface CameraSettings {
+  /** Follow owns both the centre and the zoom. With it off, both are yours. */
   follow: boolean;
-  /** Zoom, as log10 CSS pixels per world unit. Follow never touches it. */
+  /** Zoom while follow is off, as log10 CSS pixels per world unit. */
   logScale: number;
+  /**
+   * Zoom while follow is on: log10 of the fraction of the flock's size that
+   * fills the frame. 0 is a plain fit, below it you fly inside the flock, and
+   * above it the flock shrinks to a speck on the grid.
+   */
+  frameLog: number;
+  /** How far the framing may drift, in decades, before the zoom follows it. */
+  zoomTolerance: number;
+  /** Time constant of the follow zoom, in seconds. */
+  zoomTau: number;
 }
 
 export interface LookSettings {
@@ -66,7 +84,7 @@ export function defaultSettings(): Settings {
       mode: cursorStrength === 0 ? 'nothing' : cursorStrength < 0 ? 'predator' : 'attractor',
       strength: Math.abs(cursorStrength),
     },
-    camera: { follow: true, logScale: 0 },
+    camera: { follow: true, logScale: 0, frameLog: 0, zoomTolerance: 0.05, zoomTau: 0.8 },
     look: {
       boid: DEFAULT_BOID_STYLE.name,
       trails: DEFAULT_BOID_STYLE.trail !== 'none',
@@ -183,6 +201,17 @@ export function parse(text: string | null): Settings {
       MIN_LOG_SCALE,
       MAX_LOG_SCALE,
     );
+    settings.camera.frameLog = clamp(
+      num(camera.frameLog, settings.camera.frameLog),
+      MIN_FRAME_LOG,
+      MAX_FRAME_LOG,
+    );
+    settings.camera.zoomTolerance = clamp(
+      num(camera.zoomTolerance, settings.camera.zoomTolerance),
+      0,
+      MAX_ZOOM_TOLERANCE,
+    );
+    settings.camera.zoomTau = clamp(num(camera.zoomTau, settings.camera.zoomTau), 0, MAX_ZOOM_TAU);
   }
 
   const look = from.look;
@@ -237,8 +266,10 @@ export function exportLiteral(settings: Settings): string {
   return [
     '// web-flock parameters',
     `// look ${look.boid} on ${look.grid} · trails ${look.trails ? 'on' : 'off'} · ${look.blend}`,
-    `// zoom ${(10 ** camera.logScale).toPrecision(3)} px/u · follow ${camera.follow ? 'on' : 'off'}` +
-      ` · cursor ${settings.cursor.mode}`,
+    camera.follow
+      ? `// follow on · frame ${formatFramePercent(camera.frameLog)} · cursor ${settings.cursor.mode}`
+      : `// follow off · zoom ${(10 ** camera.logScale).toPrecision(3)} px/u` +
+        ` · cursor ${settings.cursor.mode}`,
     '{',
     ...lines,
     '}',

@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 
 import type { FlockSample } from '../sim/simulation';
 import {
+  approach,
   fitLogScale,
   flockReach,
+  followLogScale,
   FRAME_QUANTILE,
+  MAX_FRAME_LOG,
   MAX_LOG_SCALE,
+  MIN_FRAME_LOG,
   MIN_LOG_SCALE,
+  stepFrame,
   stepZoom,
 } from './framing';
 
@@ -117,5 +122,83 @@ describe('stepZoom', () => {
 
   it('comes back to where it started', () => {
     expect(stepZoom(stepZoom(0.4, 0.3), -0.3)).toBeCloseTo(0.4, 9);
+  });
+});
+
+describe('followLogScale', () => {
+  it('is a plain fit at 100%', () => {
+    expect(followLogScale(100, 800, 600, 0)).toBeCloseTo(fitLogScale(100, 800, 600), 12);
+  });
+
+  // The wheel moves decades, so one notch has to mean the same either side of
+  // the follow switch.
+  it('trades a decade of frame for a decade of zoom', () => {
+    const fit = fitLogScale(100, 800, 600);
+    expect(followLogScale(100, 800, 600, 1)).toBeCloseTo(fit - 1, 12);
+    expect(followLogScale(100, 800, 600, -1)).toBeCloseTo(fit + 1, 12);
+  });
+
+  it.each([
+    ['as far out as the slider goes', MAX_FRAME_LOG],
+    ['as far in as the slider goes', MIN_FRAME_LOG],
+  ])('stays inside the zoom limits %s', (_case, frameLog) => {
+    const scale = followLogScale(1e-9, 800, 600, frameLog);
+    expect(scale).toBeLessThanOrEqual(MAX_LOG_SCALE);
+    expect(scale).toBeGreaterThanOrEqual(MIN_LOG_SCALE);
+  });
+});
+
+describe('stepFrame', () => {
+  it.each([
+    ['at the top', MAX_FRAME_LOG, 1, MAX_FRAME_LOG],
+    ['at the bottom', MIN_FRAME_LOG, -1, MIN_FRAME_LOG],
+  ])('clamps %s', (_case, from, decades, expected) => {
+    expect(stepFrame(from, decades)).toBe(expected);
+  });
+});
+
+describe('approach', () => {
+  // The whole point: a flock breathing inside the band moves the camera not at all.
+  it('does not move while the target is inside the tolerance', () => {
+    expect(approach(1, 1.05, 0.1, 0.5, 1 / 60)).toBe(1);
+    expect(approach(1, 0.95, 0.1, 0.5, 1 / 60)).toBe(1);
+  });
+
+  it('moves once the target passes the tolerance', () => {
+    expect(approach(1, 2, 0.1, 0.5, 1 / 60)).toBeGreaterThan(1);
+    expect(approach(1, 0, 0.1, 0.5, 1 / 60)).toBeLessThan(1);
+  });
+
+  // Stick-slip is what a naive deadband gives: move to the target, fall back
+  // inside the band, stop, get pushed out again.
+  it('comes to rest one tolerance short and stays there', () => {
+    let value = 0;
+    for (let i = 0; i < 2000; i++) value = approach(value, 1, 0.1, 0.2, 1 / 60);
+    expect(value).toBeCloseTo(0.9, 6);
+    expect(approach(value, 1, 0.1, 0.2, 1 / 60)).toBeCloseTo(value, 12);
+  });
+
+  it('never overshoots, however long the step', () => {
+    expect(approach(0, 1, 0.1, 0.2, 10)).toBeLessThanOrEqual(0.9);
+    expect(approach(0, -1, 0.1, 0.2, 10)).toBeGreaterThanOrEqual(-0.9);
+  });
+
+  // Otherwise the camera would feel different on a 120 Hz display.
+  it('lands in the same place whatever the framerate', () => {
+    const walk = (dt: number, steps: number): number => {
+      let value = 0;
+      for (let i = 0; i < steps; i++) value = approach(value, 1, 0.1, 0.5, dt);
+      return value;
+    };
+    expect(walk(1 / 120, 120)).toBeCloseTo(walk(1 / 30, 30), 12);
+    expect(walk(1, 1)).toBeCloseTo(walk(1 / 60, 60), 12);
+  });
+
+  it('snaps to the edge of the band with no time constant', () => {
+    expect(approach(0, 1, 0.1, 0, 1 / 60)).toBeCloseTo(0.9, 12);
+  });
+
+  it('stands still when no time has passed', () => {
+    expect(approach(0, 1, 0.1, 0.5, 0)).toBe(0);
   });
 });

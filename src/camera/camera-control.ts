@@ -1,11 +1,29 @@
 import type { FlockSample } from '../sim/simulation';
 import type { CameraSettings } from '../ui/settings';
 import type { Camera } from './camera';
-import { fitLogScale, flockReach, FRAME_QUANTILE, stepZoom } from './framing';
+import {
+  approach,
+  fitLogScale,
+  flockReach,
+  followLogScale,
+  FRAME_QUANTILE,
+  stepFrame,
+  stepZoom,
+} from './framing';
 
 /**
- * Follow and zoom are independent. Follow moves the centre and never touches
- * zoom, and only the user turns follow off.
+ * Follow owns the centre and the zoom together, and only the user turns it off.
+ * With it off, the zoom is a plain number and the pointer drags the centre.
+ *
+ * While following, the zoom you set is a fraction of the flock's size rather
+ * than an absolute scale, so the camera keeps that framing as the flock
+ * breathes.
+ *
+ * The centre chases the flock outright, because a centroid of hundreds of boids
+ * barely jitters. The zoom cannot: the flock's reach moves every step, and a
+ * zoom that answered it would hunt, dragging the grid's decades in and out with
+ * it. So it follows through a deadband and a time constant, and only when it
+ * must.
  */
 
 /** Decades of zoom per pixel of wheel travel. */
@@ -13,6 +31,14 @@ const WHEEL_SENSITIVITY = 0.0016;
 
 /** Decades per keypress. Small enough to walk through a grid decade handover. */
 const KEY_ZOOM_STEP = 0.05;
+
+/**
+ * How much lazier the zoom is on the way in than on the way out, in deadband
+ * and in time constant. If boids are about to leave the screen that is urgent,
+ * and empty space around a flock that has drawn itself in is not.
+ */
+const LAZY_TOLERANCE = 3;
+const LAZY_TAU = 3;
 
 export interface CameraControlOptions {
   /** The live camera folder of the settings. The wheel and a fit write to it. */
@@ -26,9 +52,12 @@ export interface CameraControlOptions {
 }
 
 export interface CameraControl {
-  /** Puts the camera where the settings say. Call it once per frame, before drawing. */
-  apply(): void;
-  /** Centres on the flock and zooms to fit it, once. */
+  /**
+   * Puts the camera where the settings say. Call it once per frame, before
+   * drawing, with the seconds since the last call.
+   */
+  apply(dt: number): void;
+  /** Centres on the flock and frames it, dropping any follow zoom back to a plain fit. */
   frameFlock(): void;
   readonly help: string;
   dispose(): void;
@@ -44,8 +73,36 @@ export function createCameraControl(
   /** Grown as needed and reused, so a fit allocates nothing. */
   let radii = new Float64Array(256);
 
+  /**
+   * The zoom the camera is actually at. While following it lags the framing by
+   * up to a deadband, so it is not the same number as either setting.
+   */
+  let live = settings.logScale;
+  let following = settings.follow;
+  /** The framing the live zoom was last matched to. */
+  let frameLog = settings.frameLog;
+  /** Cleared after the first following frame, so the page opens framed rather than gliding in. */
+  let snap = settings.follow;
+
+  /**
+   * Moves the live zoom with a change to the framing, whether it came from the
+   * wheel or from the panel. Asking for a different framing is the user asking
+   * to see something now, so it does not wait behind the deadband.
+   */
+  const syncFrame = (): void => {
+    if (settings.frameLog === frameLog) return;
+    live = stepZoom(live, frameLog - settings.frameLog);
+    frameLog = settings.frameLog;
+  };
+
   const zoomBy = (decades: number): void => {
-    settings.logScale = stepZoom(settings.logScale, decades);
+    if (settings.follow) {
+      // Zooming in shows less of the flock, so the fraction moves the other way.
+      settings.frameLog = stepFrame(settings.frameLog, -decades);
+      syncFrame();
+    } else {
+      settings.logScale = stepZoom(settings.logScale, decades);
+    }
     onZoomChanged();
   };
 
@@ -96,11 +153,18 @@ export function createCameraControl(
     if (flock.count > radii.length) radii = new Float64Array(flock.count);
 
     camera.setCenter(flock.centroid.x, flock.centroid.y);
-    settings.logScale = fitLogScale(
+    live = fitLogScale(
       flockReach(flock, FRAME_QUANTILE, radii),
       camera.viewportWidth,
       camera.viewportHeight,
     );
+    // Asked for by a key or a button, so it lands now rather than easing in.
+    if (settings.follow) {
+      settings.frameLog = 0;
+      frameLog = 0;
+    } else {
+      settings.logScale = live;
+    }
     onZoomChanged();
   };
 
@@ -132,13 +196,49 @@ export function createCameraControl(
   window.addEventListener('keydown', onKeyDown);
 
   return {
-    apply(): void {
-      // Cheap every frame: the setter compares before it marks the transform dirty.
-      camera.logScale = settings.logScale;
-      if (!settings.follow) return;
+    apply(dt: number): void {
+      if (settings.follow !== following) {
+        following = settings.follow;
+        // Hand the zoom over rather than jump: the view you were looking at
+        // while following is the one the plain zoom starts from.
+        if (!following) {
+          settings.logScale = live;
+          onZoomChanged();
+        }
+      }
 
-      const flock = sample();
-      if (flock.count > 0) camera.setCenter(flock.centroid.x, flock.centroid.y);
+      if (following) {
+        syncFrame();
+        const flock = sample();
+        if (flock.count > 0) {
+          camera.setCenter(flock.centroid.x, flock.centroid.y);
+          if (flock.count > radii.length) radii = new Float64Array(flock.count);
+
+          const wanted = followLogScale(
+            flockReach(flock, FRAME_QUANTILE, radii),
+            camera.viewportWidth,
+            camera.viewportHeight,
+            settings.frameLog,
+          );
+          // Above the live zoom is a zoom in, which is the lazy direction.
+          const lazy = wanted > live;
+          live = snap
+            ? wanted
+            : approach(
+                live,
+                wanted,
+                settings.zoomTolerance * (lazy ? LAZY_TOLERANCE : 1),
+                settings.zoomTau * (lazy ? LAZY_TAU : 1),
+                dt,
+              );
+          snap = false;
+        }
+      } else {
+        live = settings.logScale;
+      }
+
+      // Cheap every frame: the setter compares before it marks the transform dirty.
+      camera.logScale = live;
     },
 
     frameFlock,

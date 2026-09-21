@@ -1,10 +1,17 @@
 import type { FolderApi } from '@tweakpane/core';
 import { Pane } from 'tweakpane';
 
-import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
+import {
+  MAX_FRAME_LOG,
+  MAX_LOG_SCALE,
+  MAX_ZOOM_TAU,
+  MAX_ZOOM_TOLERANCE,
+  MIN_FRAME_LOG,
+  MIN_LOG_SCALE,
+} from '../camera/framing';
 import { BOID_PRESETS } from '../render/boid-style';
 import { GRID_PRESETS } from '../render/grid-style';
-import { formatScale } from '../render/overlay';
+import { formatFramePercent, formatScale } from '../render/overlay';
 import type { Settings } from './settings';
 import { CURSOR_MODES } from './settings';
 
@@ -18,7 +25,7 @@ export interface PanelHooks {
    * interaction, which is when a set is worth storing.
    */
   apply(committed: boolean): void;
-  /** Centres on the flock and zooms to fit it, without turning follow on. */
+  /** Centres on the flock and frames it, without turning follow on. */
   frameFlock(): void;
   /** Re-seeds the flock, which is the only thing `spawnRadius` can affect. */
   restart(): void;
@@ -135,15 +142,46 @@ export function createPanel(options: PanelOptions): Panel {
 
   const cameraFolder = pane.addFolder({ title: 'camera', expanded: true });
   cameraFolder.addBinding(camera, 'follow');
-  cameraFolder.addBinding(camera, 'logScale', {
+  // With follow on the zoom is a fraction of the flock, and with it off a plain
+  // scale. Tweakpane cannot relabel a binding, so both are here and one hides.
+  const zoomBinding = cameraFolder.addBinding(camera, 'logScale', {
     label: 'zoom',
     min: MIN_LOG_SCALE,
     max: MAX_LOG_SCALE,
     format: (value: number) => formatScale(10 ** value),
   });
+  const followBindings = [
+    cameraFolder.addBinding(camera, 'frameLog', {
+      label: 'frame',
+      min: MIN_FRAME_LOG,
+      max: MAX_FRAME_LOG,
+      step: 0.01,
+      format: formatFramePercent,
+    }),
+    cameraFolder.addBinding(camera, 'zoomTolerance', {
+      label: 'zoom hold',
+      min: 0,
+      max: MAX_ZOOM_TOLERANCE,
+      step: 0.005,
+      format: (value: number) => `${value.toFixed(3)} dec`,
+    }),
+    cameraFolder.addBinding(camera, 'zoomTau', {
+      label: 'zoom ease',
+      min: 0,
+      max: MAX_ZOOM_TAU,
+      step: 0.05,
+      format: (value: number) => `${value.toFixed(2)} s`,
+    }),
+  ];
   cameraFolder.addButton({ title: 'frame flock' }).on('click', () => {
     hooks.frameFlock();
   });
+
+  const showCameraMode = (): void => {
+    zoomBinding.hidden = camera.follow;
+    for (const binding of followBindings) binding.hidden = !camera.follow;
+  };
+  showCameraMode();
 
   const lookFolder = pane.addFolder({ title: 'look', expanded: false });
   lookFolder.addBinding(look, 'boid', { label: 'palette', options: presetOptions(BOID_PRESETS) });
@@ -165,11 +203,13 @@ export function createPanel(options: PanelOptions): Panel {
   });
 
   pane.on('change', (event) => {
+    showCameraMode();
     hooks.apply(event.last);
   });
 
   const refresh = (): void => {
     pane.refresh();
+    showCameraMode();
   };
 
   return {

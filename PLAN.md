@@ -103,16 +103,22 @@ without the user asking, so the state machine this plan rules out is still ruled
 Slider ranges are wide rather than right, as planned. Step 4a's design harness was deleted here, as
 it said it would be.
 
-### 6. Camera behaviour (Collaborate)
+### 6. Camera behaviour (Collaborate, done)
 
 Auto-follow and auto-zoom that are comfortable to watch: robust framing that one straggler cannot
 drag, hysteresis so the flock moves freely inside a window before the camera reacts, and damping
 that makes both feel even. The framing percentage from step 5 lands here.
 
-This is the step most likely to come out subtly wrong. Every piece is easy, and the combination is a
-feel problem. It is coupled to the grid, because a camera that hunts makes the grid pulse between
-decades, so the grid can be correct on its own and still look broken. Judging it means watching both
-together.
+Half of it was not needed. The centre never had to be damped, because a centroid of hundreds of
+boids does not jitter, and the zoom alone was what looked broken.
+
+The framing percentage came out as a multiplier on the flock's size rather than as the quantile. The
+range you want spans decades, from flying inside the flock to leaving it a speck on the grid, and a
+quantile cannot reach past the whole flock. The quantile stayed a constant, rejecting stragglers and
+nothing else.
+
+Follow owns the zoom now, so the panel carries two zoom controls and shows whichever one is live.
+Its two tuning knobs are still there, and 7b decides whether they stay.
 
 ### 7a. Behaviour tuning (Collaborate)
 
@@ -144,8 +150,8 @@ against what the project turned out to be.
 
 ## Sequencing
 
-Steps 1 to 5 are done. Step 6 and step 7a are independent of each other and can run in either order
-or together. Steps 7b and 8 come last, because both judge the finished thing.
+Steps 1 to 6 are done. Step 7a is next. Steps 7b and 8 come last, because both judge the finished
+thing.
 
 ## Out of scope for iteration one
 

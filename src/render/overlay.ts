@@ -334,6 +334,15 @@ function trimZeros(text: string): string {
 }
 
 /** Below 1 px per unit it flips to units per pixel, the readable direction. */
+/**
+ * The follow zoom, as the percentage of the flock's size on screen. 100% is a
+ * plain fit.
+ */
+export function formatFramePercent(frameLog: number): string {
+  const percent = 10 ** frameLog * 100;
+  return `${percent >= 100 ? Math.round(percent) : Number(percent.toPrecision(2))}%`;
+}
+
 export function formatScale(pixelsPerUnit: number): string {
   if (pixelsPerUnit >= 1) return `${trimZeros(pixelsPerUnit.toPrecision(3))} px/u`;
   return `${trimZeros((1 / pixelsPerUnit).toPrecision(3))} u/px`;

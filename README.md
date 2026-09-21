@@ -25,12 +25,18 @@ immediately:
 - **flock**: count, the rule weights and their radii, field of view, speed and turn limits, the pull
   toward the origin, wander, and a spawn radius with a `restart` button beside it.
 - **cursor**: predator, attractor or nothing, with a strength and a reach drawn as a ring.
-- **camera**: follow, zoom, and a button that frames the flock.
+- **camera**: follow, the zoom, and a button that frames the flock.
 - **look**: palette, trails, blending, grid preset, and tick labels.
 
 Two buttons at the bottom print the current set to the console and reset everything to defaults.
 Your set is saved in `localStorage`. The other three corners show the frame-time HUD, the coordinate
 readout and the key hints.
+
+With follow on, the camera centres on the flock and the zoom is a percentage of the flock's size:
+100% frames it, less flies you into the middle of it, and more leaves it a speck on the grid. The
+camera holds a zoom until the flock outgrows it, so the view does not hunt, and `zoom hold` and
+`zoom ease` say how far it lets the flock drift and how fast it follows. Turn follow off and the
+zoom is a plain scale you set yourself.
 
 Wheel zooms. Drag pans, while follow is off. `z` frames the flock, and `+` and `-` zoom a small step
 at a time.

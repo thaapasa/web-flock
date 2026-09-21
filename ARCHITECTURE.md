@@ -75,8 +75,17 @@ is a named preset in `grid-style.ts` or `boid-style.ts`; a renderer has no appea
 World space has +y up, and the flip to screen space happens in `camera/camera.ts` and nowhere else.
 Zoom is held as log10 pixels per world unit, which suits the grid's per-decade fade.
 
-The camera centres on the flock every frame, or the pointer drags it when follow is off. Both are
-undamped: smoothing, hysteresis and automatic zoom are step 6 in PLAN.md.
+With follow on, the camera centres on the flock every frame and takes its zoom from the flock's
+size. Otherwise the pointer drags the centre and the zoom is whatever the user set.
+
+The centre needs no smoothing, because a centroid of hundreds of boids barely jitters. The zoom
+does: the flock's reach moves every step, and a zoom that answered it would hunt, which pulls the
+grid's decades in and out and makes a correct grid look broken. So the zoom moves only the distance
+past a deadband, and eases rather than jumps. It is lazier zooming in than out, because boids about
+to leave the screen are urgent and empty space is not.
+
+A fit measures the flock across a quantile of the sample rather than all of it, so one straggler
+cannot drag the camera.
 
 ## Settings
 
