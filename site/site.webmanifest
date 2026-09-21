@@ -1,6 +1,6 @@
 {
-  "name": "web-flock",
-  "short_name": "Boids",
+  "name": "Flock",
+  "short_name": "Flock",
   "icons": [
     {
       "src": "web-app-manifest-192x192.png",
