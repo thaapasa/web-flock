@@ -130,14 +130,11 @@ describe('flock', () => {
   });
 
   it('keeps the flock from escaping, however fast it flies', () => {
-    // "Never escapes for good" is a statement about the long run, not about one
-    // moment: what matters is that the flock's reach settles instead of
-    // creeping outward. So measure it early, then measure it again over a much
-    // longer window and insist it has not grown.
+    // Escaping is about the long run, so measure the flock's reach early, then
+    // again over a much longer window, and insist it has not grown.
     //
-    // Deliberately a hard case. The speed clamp means the origin spring cannot
-    // slow a boid down, only turn it, so boundedness rests on the turn actually
-    // winning — which is exactly the thing that could be quietly broken.
+    // A hard case on purpose: the speed clamp means the origin spring cannot
+    // slow a boid down, only turn it, so boundedness rests on the turn winning.
     const simulation = makeFlock({ originPull: 0.5, maxSpeed: 400, minSpeed: 400 });
 
     const maxRadius = (): number => {
@@ -262,10 +259,9 @@ describe('flock', () => {
   });
 
   /**
-   * The colour input added in 4a. Checked against brute force because the
-   * spatial hash is what produces it, and a neighbour-lookup bug does not
-   * crash — it just tints the flock slightly wrong, which is exactly the kind
-   * of thing step 7a would waste an afternoon tuning around.
+   * Checked against brute force because the spatial hash produces the counts,
+   * and a neighbour-lookup bug does not crash. It only tints the flock slightly
+   * wrong, and someone would then spend an afternoon tuning around it.
    */
   it('counts every neighbour within the radius, and none outside it', () => {
     const params = { ...DEFAULT_SIM_PARAMS, count: 300, neighbourRadius: 18 };
@@ -273,8 +269,7 @@ describe('flock', () => {
     run(simulation, 200);
 
     // Against the positions the counting pass saw, not the ones the
-    // integration pass then wrote: a density describes the neighbourhood the
-    // step was computed from. See `Simulation.densities`.
+    // integration pass then wrote. See `Simulation.densities`.
     const seen = Float32Array.from(simulation.positions);
     simulation.step(DT, NO_CURSOR);
 
@@ -293,9 +288,8 @@ describe('flock', () => {
   });
 
   /**
-   * Omnidirectional on purpose: a field-of-view filter here would make a
-   * boid's colour change as it turned, which reads as flicker rather than as
-   * information. See `Simulation.densities`.
+   * A field-of-view filter here would change a boid's colour as it turned,
+   * which reads as flicker rather than as information.
    */
   it('counts neighbours behind a boid as well as ahead of it', () => {
     const narrow = makeFlock({ count: 300, fieldOfView: 0.2 });
@@ -308,10 +302,9 @@ describe('flock', () => {
   });
 
   /**
-   * The reason the ramps hold fractions rather than world values. Crowding
-   * scales with how many boids there are, so a band fixed for five hundred is
-   * pinned at the top for five thousand — and a pinned ramp does not look
-   * stale, it looks like every boid is the same colour.
+   * Why the ramps hold fractions rather than world values. Crowding scales with
+   * how many boids there are, so a band fixed for five hundred sits pinned at
+   * the top for five thousand, and a pinned ramp colours every boid the same.
    */
   it('grows its density band as the flock thickens', () => {
     const bandFor = (count: number): number => {
@@ -340,9 +333,8 @@ describe('flock', () => {
   });
 
   /**
-   * A band is the divisor of a colour. If it tracked its estimate exactly it
-   * would twitch every step and shimmer the whole flock between hues while
-   * nothing about the flock had changed.
+   * A band divides a colour. If it tracked its estimate exactly it would twitch
+   * every step and shimmer the whole flock between hues.
    */
   it('moves its density band smoothly rather than in jumps', () => {
     const simulation = makeFlock({ count: 800 });

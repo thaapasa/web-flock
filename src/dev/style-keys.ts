@@ -8,24 +8,11 @@ import type { PresetSelection, QuadrantView } from './compare';
 import { createPresetSelection } from './compare';
 
 /**
- * What survives step 5 of the keyboard.
+ * The keys the panel cannot replace: comparison mode over the presets, and
+ * frame-time readings.
  *
- * The panel took everything that is a *value* — counts, radii, weights, which
- * preset, what the cursor does. What is left is the two things a panel cannot
- * do, and both are asked for again later in PLAN.md:
- *
- * - **Comparison mode** (`c`, `[`, `]`, digits), four presets in one frame.
- *   Step 3 built it, 4a reused it, 7a and 7b both want it.
- * - **Readings** (`p`, `P`), which is how a number leaves this machine: Claude
- *   has no browser, so the user is the instrument for every performance
- *   question and `dev/readings.ts` is the shape the answer travels in.
- *
- * The digits drive one list at a time and `b` says which — grid or boid. They
- * are the same nine keys and there is nothing sensible for them to do to both
- * at once.
- *
- * **Deleted when the taste calls are settled, in 7b.** Nothing outside `dev/`
- * may import from it.
+ * The digits drive one preset list at a time and `b` says which, grid or boid,
+ * because they are the same nine keys.
  */
 
 export interface StyleKeyHooks {
@@ -33,7 +20,6 @@ export interface StyleKeyHooks {
   changed(): void;
   /** Records the HUD as it stands and prints every reading so far. */
   dumpReadings(): void;
-  /** Starts a fresh table of readings. */
   clearReadings(): void;
 }
 
@@ -49,7 +35,7 @@ export interface StyleKeys {
 export function createStyleKeys(
   settings: Settings,
   hooks: StyleKeyHooks,
-  /** Whether the keys are ours — false while the panel has the keyboard. */
+  /** False while the panel has the keyboard. */
   active: () => boolean,
 ): StyleKeys {
   const gridPresets: PresetSelection<Readonly<GridStyle>> = createPresetSelection(GRID_PRESETS, {
@@ -98,10 +84,9 @@ export function createStyleKeys(
     },
 
     get boidQuadrants() {
-      // The panel's trail, blend and fade overrides ride on top of every pane,
-      // so a comparison shows the presets differing in what they actually
-      // differ in rather than in what the panel has since changed.
       if (!onBoids) return null;
+      // The panel's trail, blend and fade overrides go on every pane, so the
+      // panes differ in the preset and nothing else.
       return (
         boidPresets.quadrants?.map((pane) => ({
           ...pane,

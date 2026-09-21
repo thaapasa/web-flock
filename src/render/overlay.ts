@@ -5,46 +5,31 @@ import type { FrameStats } from './frame-stats';
 import type { GridStyle } from './grid-style';
 
 /**
- * The text layer: edge tick labels, the coordinate readout, and comparison
- * mode's captions.
- *
- * A second canvas over the WebGL one, drawn with the 2D context. Text is the
- * one thing a GPU is bad at without a pile of machinery — a glyph atlas, a
- * layout pass, a shader — and none of that machinery would buy anything here,
- * because these few dozen numbers never need to be inside the scene. The 2D
- * context renders them at native resolution with the platform's own hinting,
- * for a `clearRect` and some `fillText` a frame.
+ * The text layer: tick labels, the coordinate readout, and comparison mode's
+ * captions, drawn with the 2D context on a second canvas over the WebGL one.
  *
  * The overlay takes no pointer events (`pointer-events: none` in the page), so
  * the canvas underneath keeps receiving them.
  */
 
-/** Where tick labels sit. An open question in PLAN.md, so both are built. */
 export type LabelPlacement = 'edge' | 'axis';
 
-/** How tick values read. The other open question: `1200` against `1.2k`. */
+/** How tick values read: `1200` against `1.2k`. */
 export type LabelFormat = 'plain' | 'compact';
 
 export interface OverlayOptions {
   placement: LabelPlacement;
   format: LabelFormat;
   /**
-   * Minimum CSS pixels between labelled ticks. Sets which decade gets labelled
-   * and therefore how crowded the edges are — the labels' equivalent of the
-   * grid's `minPixelSpacing`, and much larger, because a number needs far more
-   * room than a line.
+   * Minimum CSS pixels between labelled ticks, which decides which decade gets
+   * labelled. The labels' `minPixelSpacing`, and much larger than the grid's,
+   * because a number needs more room than a line.
    */
   minSpacing: number;
   /** CSS pixels. */
   fontSize: number;
 }
 
-/**
- * Both taste calls PLAN.md left open for step 3, settled by eye: labels on the
- * screen edge, and `1.2k` rather than `1200`. The losing options stay
- * reachable — they are a branch each, and step 7b looks at all of this again
- * against the finished renderer.
- */
 export const DEFAULT_OVERLAY_OPTIONS: OverlayOptions = {
   placement: 'edge',
   format: 'compact',
@@ -52,11 +37,10 @@ export const DEFAULT_OVERLAY_OPTIONS: OverlayOptions = {
   fontSize: 11,
 };
 
-/** What the readout says about the boids. Null before anything draws them. */
 export interface BoidReadout {
   readonly styleName: string;
   /** Drawn with the frame time rather than with the style: it is what the
-      frame time costs. */
+   * frame time costs. */
   readonly count: number;
 }
 
@@ -65,26 +49,18 @@ export interface OverlayFrame {
   /** World-space cursor, or null when it is not over the canvas. */
   cursor: Readonly<Vec2> | null;
   /**
-   * What the cursor is doing to the flock. Empty when it is doing nothing.
-   *
-   * Worth a word of its own because the ring on the grid says how far the force
-   * reaches but not which way it pushes, and a predator and an attractor draw
-   * exactly the same circle.
+   * What the cursor is doing to the flock, or empty when it is doing nothing.
+   * A predator and an attractor draw the same ring, so only the text says
+   * which way the force pushes.
    */
   cursorMode: string;
-  /**
-   * Whether the camera is tracking the flock.
-   *
-   * It rides on the centre line rather than taking one of its own: what it says
-   * about is what that line is showing.
-   */
   follow: boolean;
   style: Readonly<GridStyle>;
   /** Null when nothing is drawing boids, which hides the line. */
   boid: BoidReadout | null;
   /**
    * Comparison mode: the four captions in reading order, top-left first. Null
-   * for an ordinary frame, which is what draws tick labels.
+   * on an ordinary frame, which is the frame that draws tick labels.
    */
   quadrants: readonly string[] | null;
   /** One dim line of key bindings along the bottom. Empty hides it. */
@@ -106,11 +82,9 @@ const HELP_COLOUR = 'rgba(120, 165, 190, 0.55)';
 const SEPARATOR_COLOUR = 'rgba(190, 225, 245, 0.22)';
 const HALO = 'rgba(0, 0, 0, 0.8)';
 
-/**
- * A 60 fps frame is 16.7 ms. The first threshold sits just above it so that
- * ordinary jitter does not flicker the colour, and the second marks the point
- * where the display has certainly dropped a frame.
- */
+// A 60 fps frame is 16.7 ms. The first threshold sits just above it so that
+// jitter does not flicker the colour; past the second the display has
+// certainly dropped a frame.
 const FRAME_OK_MS = 17.5;
 const FRAME_WARN_MS = 25;
 const FRAME_COLOURS = [
@@ -154,10 +128,9 @@ export function createOverlay(
     const step = 10 ** exponent;
     const spacing = step * camera.scale;
 
-    // Ticks that are not also ticks of the next decade up are the ones that
-    // have just appeared, so they fade in as they gain room, exactly as the
-    // grid lines under them do. Without this the whole set of labels would
-    // blink into existence at once.
+    // Ticks that are not also ticks of the decade above have just appeared, so
+    // they fade in as they gain room, like the grid lines under them. Without
+    // this the whole set of labels would blink into existence at once.
     const fine = smoothstep(minSpacing, minSpacing * 2.5, spacing);
 
     const bounds = camera.visibleBounds();
@@ -191,9 +164,8 @@ export function createOverlay(
 
   const drawReadout = (frame: OverlayFrame): void => {
     const { camera, cursor } = frame;
-    // Show coordinates to the precision the current zoom actually resolves:
-    // more decimals when a pixel is a small piece of the world, none when it
-    // is a large one.
+    // Coordinates to the precision the current zoom resolves: more decimals
+    // when a pixel is a small piece of the world, none when it is a large one.
     const decimals = clamp(Math.ceil(Math.log10(camera.scale)) + 1, 0, 6);
     const gridExponent = Math.ceil(Math.log10(options.minSpacing / camera.scale));
 
@@ -252,11 +224,8 @@ export function createOverlay(
     }
   };
 
-  /**
-   * The frame-time HUD. Colour-coded because the question it answers is "is it
-   * still 60" — which should be readable at a glance, while the eye is on the
-   * flock rather than on the digits.
-   */
+  /** The frame-time HUD, colour-coded so that "is it still 60" reads at a
+   * glance. */
   const drawStats = (frame: OverlayFrame, stats: FrameStats): void => {
     const severity = stats.frameMs <= FRAME_OK_MS ? 0 : stats.frameMs <= FRAME_WARN_MS ? 1 : 2;
     const lines = [
@@ -274,8 +243,8 @@ export function createOverlay(
     const right = frame.camera.viewportWidth - MARGIN;
     let y = MARGIN;
     for (let i = 0; i < lines.length; i++) {
-      // Only the headline carries the colour; the detail lines stay neutral so
-      // the warning reads as one signal rather than three.
+      // Only the headline carries the colour, so the warning reads as one
+      // signal rather than three.
       ctx.fillStyle = i === 0 ? FRAME_COLOURS[severity] : READOUT_COLOUR;
       ctx.strokeText(lines[i], right, y);
       ctx.fillText(lines[i], right, y);
@@ -292,9 +261,8 @@ export function createOverlay(
       ctx.clearRect(0, 0, width, height);
 
       if (frame.quadrants) {
-        // Per-quadrant tick labels would be four sets of numbers competing for
-        // the same few hundred pixels, and the variants differ in the lines,
-        // not the labels. Captions only.
+        // Four sets of tick labels would compete for the same few hundred
+        // pixels, and the variants differ in the lines, not the labels.
         drawQuadrants(frame, frame.quadrants);
       } else {
         drawTicks(frame);
@@ -334,16 +302,16 @@ const COMPACT_UNITS = [
 ] as const;
 
 /**
- * `exponent` is the decade the tick belongs to, and it is what decides how many
- * digits are meaningful: at a step of 100 there is nothing after the point to
- * say, and at a step of 0.01 there are two digits that matter.
+ * `exponent` is the decade the tick belongs to, and it decides how many digits
+ * are meaningful: at a step of 100 there is nothing after the point to say,
+ * and at a step of 0.01 there are two digits that matter.
  */
 export function formatTick(value: number, exponent: number, format: LabelFormat): string {
   if (value === 0) return '0';
 
   // Before the suffixes, not after: the largest suffix is G, so a compact
-  // format left to its own devices answers 1e12 with `1000G` and 1e15 with
-  // `1000000G`, which is worse than the exponential it was meant to avoid.
+  // format left alone answers 1e12 with `1000G`, which is worse than the
+  // exponential it was meant to avoid.
   if (exponent <= -5 || Math.abs(value) >= 1e12) {
     return value.toExponential(0).replace('e+', 'e');
   }
@@ -365,7 +333,7 @@ function trimZeros(text: string): string {
   return text.includes('.') ? text.replace(/\.?0+$/, '') : text;
 }
 
-/** Reads as "how much world is a pixel", which is the useful direction. */
+/** Below 1 px per unit it flips to units per pixel, the readable direction. */
 export function formatScale(pixelsPerUnit: number): string {
   if (pixelsPerUnit >= 1) return `${trimZeros(pixelsPerUnit.toPrecision(3))} px/u`;
   return `${trimZeros((1 / pixelsPerUnit).toPrecision(3))} u/px`;

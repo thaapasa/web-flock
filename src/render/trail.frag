@@ -2,10 +2,9 @@
 precision highp float;
 
 /**
- * The ribbon's edges, antialiased the same way every other line in the project
- * is: the geometry is a pixel wider than the ribbon on each side, and coverage
- * comes from the distance across it. A ribbon that has tapered below a pixel
- * therefore dims instead of flickering in and out along its length.
+ * The ribbon's edges, antialiased as every other line here is. The geometry is a
+ * pixel wider than the ribbon on each side and coverage comes from the distance
+ * across it, so a ribbon tapered below a pixel dims instead of flickering.
  */
 
 in float vAcross;

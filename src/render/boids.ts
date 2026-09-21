@@ -20,27 +20,20 @@ import trailVertexSource from './trail.vert?raw';
 import type { TrailHistory } from './trail-history';
 
 /**
- * The boids.
+ * The ribbon and the chevron over it both take their shape in device pixels
+ * around a position the matrix places, so stroke weight and trail width do not
+ * change with zoom.
  *
- * Two instanced draws over the same three per-boid attributes: the ribbon
- * trail, then the chevron over it. Both take their shape in device pixels
- * around a position the matrix places, so stroke weight and trail width are
- * properties of the mark rather than of the zoom.
+ * The transform is built here from the viewport rect rather than taken from the
+ * camera. Comparison mode draws one camera into four quadrants, and a quadrant
+ * is a smaller viewport at the same scale; a camera matrix scaled by the whole
+ * window would squeeze the world into each pane, while the grid, which works in
+ * pixels, would not.
  *
- * **The transform is built from the viewport rect, not from the camera's own
- * matrix.** Comparison mode draws the same camera into quadrants, and a
- * quadrant is a smaller viewport at the *same* scale — a camera matrix scaled
- * by the full window would squeeze the world into each pane while the grid,
- * which works in pixels, would not. Building the matrix here from the rect
- * keeps world units per pixel the same in every pane, so what differs between
- * them is the style and nothing else.
- *
- * One thing this does not do: work far from the origin. Positions go through
- * the matrix as float32, so a flock a million units out would quantise. The
- * grid solves this by reducing to pixel offsets on the CPU; the boids do not,
- * because the origin spring keeps the flock within a few thousand units of
- * home — well short of where it would start to show. If that ever stops being
- * true, the fix is to subtract the camera centre before upload.
+ * Positions go through the matrix as float32, so a flock a million units out
+ * would quantise. The pull toward the origin keeps it within a few thousand,
+ * well short of that. If that ever stops holding, subtract the camera centre
+ * before upload.
  */
 
 const UNIFORM_NAMES = [
@@ -82,10 +75,9 @@ const VELOCITY_LOCATION = 1;
 const DENSITY_LOCATION = 2;
 
 /**
- * What to draw: a feed and the history that goes with it, bound into a vertex
- * array once. One VAO serves both programs because neither has a per-vertex
- * attribute — the quad's corners and the ribbon's samples both come from
- * `gl_VertexID`.
+ * A feed and its history, bound into a vertex array once. One VAO serves both
+ * programs because neither has a per-vertex attribute: the quad's corners and
+ * the ribbon's samples come from `gl_VertexID`.
  */
 export interface BoidTarget {
   readonly feed: BoidFeed;
@@ -97,7 +89,7 @@ export interface BoidTarget {
 }
 
 export interface BoidRenderer {
-  /** Binds a feed and its history. Cheap; done once per simulation, not per frame. */
+  /** Call it once per simulation, not per frame. */
   bind(feed: BoidFeed, trails: TrailHistory, ranges: FlockRanges): BoidTarget;
   /** Draws into `rect`, which is left as the current GL viewport. */
   draw(
@@ -144,8 +136,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
         type: attribute.type,
         stride: attribute.stride,
         offset: attribute.offset,
-        // Every attribute advances per boid, never per vertex: the mark's own
-        // geometry comes from gl_VertexID.
+        // Per boid, never per vertex: the mark's geometry comes from gl_VertexID.
         divisor: 1,
       });
 
@@ -174,13 +165,9 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       const lengthCss = markLength(style, camera.scale);
       const length = lengthCss * pixelRatio;
       const halfWidth = length * Math.tan(style.halfAngle);
-      // Not simply the style's width: at the bottom of the zoom range the mark
-      // has hit its floor and a full-weight stroke would fill it in. See
-      // strokeWidth.
       const lineWidth = strokeWidth(style, lengthCss) * pixelRatio;
       const trailWidth = lineWidth * style.trailWidth;
       const [low, high] = colourBand(style, target.ranges);
-      // What the floor is holding up, given back as brightness. See floorFade.
       const brightness = style.brightness * floorBrightness(style, camera.scale);
       const colourMode = COLOUR_INPUT_CODES[style.colourBy];
 
@@ -191,7 +178,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       gl.viewport(rect.x, rect.y, rect.width, rect.height);
       gl.enable(gl.BLEND);
       // Both shaders emit premultiplied colour, so the source factor is ONE
-      // either way and only the destination distinguishes the two modes.
+      // either way and only the destination tells the two modes apart.
       gl.blendFunc(gl.ONE, style.blend === 'additive' ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
 
       const samples = trailSamples(style, target.trails.rows);
@@ -208,8 +195,8 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
         gl.uniform1i(trailUniforms.uSamples, samples);
 
         gl.uniform1f(trailUniforms.uHalfWidth, trailWidth * 0.5);
-        // Out to the middle of the chevron's open back, so the ribbon leaves the
-        // mark rather than starting inside it.
+        // Out to the middle of the chevron's open back, so the ribbon leaves
+        // the mark rather than starting inside it.
         gl.uniform1f(trailUniforms.uInset, length * 0.5);
         gl.uniform1f(trailUniforms.uTaper, style.trailTaper);
         gl.uniform1f(trailUniforms.uFalloff, style.trailFalloff);
@@ -245,8 +232,8 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
 
       drawInstanced(gl, target.vao, gl.TRIANGLE_STRIP, 4, count);
 
-      // The grid draws opaque and expects to own its pixels; leaving blending
-      // on would make the next frame's clear-and-draw depend on this one.
+      // The grid draws opaque and owns its pixels. Leaving blending on would
+      // make the next frame's clear-and-draw depend on this one.
       gl.disable(gl.BLEND);
     },
 

@@ -33,8 +33,7 @@ describe('flockReach', () => {
     expect(flockReach(shuffled, 0.85, scratch)).toBe(8);
   });
 
-  // The whole reason PLAN.md asks for a quantile rather than a maximum: one
-  // boid halfway to the horizon must not be able to force a zoom-out.
+  // One boid halfway to the horizon must not force a zoom-out.
   it('ignores a straggler', () => {
     const together = sampleAt([1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
     const andOneAway = sampleAt([1, 1, 1, 1, 1, 1, 1, 1, 1, 100000]);
@@ -71,8 +70,7 @@ describe('fitLogScale', () => {
     expect(fitLogScale(100, 800, 600)).toBeCloseTo(fitLogScale(100, 600, 800), 12);
   });
 
-  // The same flock, ten times wider, has to come out ten times smaller — which
-  // is what makes one press of `z` frame a flock of any size.
+  // One press of `z` has to frame a flock of any size.
   it('scales inversely with the flock', () => {
     const near = 10 ** fitLogScale(10, 800, 600);
     const far = 10 ** fitLogScale(100, 800, 600);
@@ -104,8 +102,7 @@ describe('stepZoom', () => {
     expect(stepZoom(1, -0.25)).toBeCloseTo(0.75, 9);
   });
 
-  // Additive in log space is multiplicative in scale, so a step is the same
-  // sized step wherever in the range it is taken.
+  // Additive in log space is multiplicative in scale.
   it('multiplies the scale by the same factor at both ends of the range', () => {
     const factor = (from: number): number => 10 ** stepZoom(from, 0.1) / 10 ** from;
     expect(factor(-2)).toBeCloseTo(factor(2), 9);

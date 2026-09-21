@@ -1,65 +1,31 @@
 import type { FlockSample } from '../sim/simulation';
 
 /**
- * Putting the flock on screen, once.
- *
- * Step 5 asked for a wheel that adjusts a framing percentage rather than a raw
- * zoom — how much room the flock gets, recomputed from how far it
- * currently spreads. That was built and taken out again, and the reason is
- * worth keeping: **a zoom derived from a live measurement hunts.** The flock's
- * reach moves a little every step, so the scale moved a little every frame, and
- * a grid whose whole job is to make a change of scale something you watch
- * happen turned that into a permanent shimmer. Nothing was wrong with the
- * measurement; it was the derivation running continuously that could not work.
- *
- * So zoom is a number the camera holds until something changes it, and the
- * measurement is a one-shot: {@link fitLogScale} answers "what zoom would frame
- * the flock right now", and only a keypress or a button ever asks.
- *
- * Step 6 is where a continuously derived zoom becomes possible, because that is
- * where the hysteresis and the damping live — a tolerance band the flock moves
- * freely inside, so the camera holds still until it has genuinely outgrown the
- * frame. The parts that survive to feed it are here already: the quantile, the
- * reach, and the fit.
+ * The camera holds zoom as a number until something changes it. A zoom derived
+ * continuously from the flock's spread hunts, because the flock's reach moves
+ * every step, so `fitLogScale` is a one-shot answer that only a keypress or a
+ * button asks for.
  */
 
-/**
- * Hard limits on zoom, as log10 CSS pixels per world unit.
- *
- * They bound the wheel and they stop a degenerate flock producing a degenerate
- * camera: one collapsed to a point has a reach near zero and would otherwise
- * ask {@link fitLogScale} for infinite magnification.
- */
+/** Zoom limits, as log10 CSS pixels per world unit. */
 export const MIN_LOG_SCALE = -3;
 export const MAX_LOG_SCALE = 3;
 
-/**
- * Fraction of the flock a fit is measured against.
- *
- * Step 6's robust framing, and already step 4b's: the tightest region holding
- * most of the flock, so a single straggler halfway to the horizon cannot force
- * a zoom-out. Step 6 adds the damping and the hysteresis around it; the
- * quantile itself is the same number either way.
- */
+/** A fit frames this fraction of the flock, so one straggler cannot force a zoom-out. */
 export const FRAME_QUANTILE = 0.85;
 
-/**
- * Room left around the flock by a fit.
- *
- * A flock that exactly touches the edges looks like it is about to escape even
- * when it is not.
- */
+/** A fit leaves this much room around the flock, as a multiple of its reach. */
 const FIT_MARGIN = 1.25;
 
-/** Smallest reach a fit will believe. See {@link MIN_LOG_SCALE}. */
+/** Floor on reach, in world units. A collapsed flock would otherwise ask for infinite zoom. */
 const MIN_REACH = 1e-3;
 
 /**
  * Radius of the tightest disc about the sample's centroid holding `quantile`
  * of it, in world units. 0 for an empty flock.
  *
- * `scratch` must hold at least `sample.count` elements and is overwritten; the
- * caller owns it so that a fit allocates nothing.
+ * `scratch` must hold at least `sample.count` elements and is overwritten. The
+ * caller owns it, so a fit allocates nothing.
  */
 export function flockReach(sample: FlockSample, quantile: number, scratch: Float64Array): number {
   const { positions, count, centroid } = sample;
@@ -71,8 +37,7 @@ export function flockReach(sample: FlockSample, quantile: number, scratch: Float
     const dy = positions[i * 2 + 1] - centroid.y;
     radii[i] = Math.sqrt(dx * dx + dy * dy);
   }
-  // A typed array sorts numerically by default, which is the one place this
-  // differs from sorting a plain array of numbers.
+  // A typed array sorts numerically, unlike a plain array of numbers.
   radii.sort();
 
   return radii[Math.floor((count - 1) * clamp(quantile, 0, 1))];
@@ -80,23 +45,15 @@ export function flockReach(sample: FlockSample, quantile: number, scratch: Float
 
 /**
  * The zoom that puts a flock of this reach on screen, as log10 CSS pixels per
- * world unit. Measured against the viewport's shorter dimension, so it frames
- * the flock however the window is shaped.
- *
- * Clamped, so the caller can hand this straight to `camera.logScale`.
+ * world unit. Measured against the viewport's shorter dimension, and clamped,
+ * so the caller can hand it straight to `camera.logScale`.
  */
 export function fitLogScale(reach: number, viewportWidth: number, viewportHeight: number): number {
   const half = Math.min(viewportWidth, viewportHeight) / 2;
   return clamp(Math.log10(half / (Math.max(reach, MIN_REACH) * FIT_MARGIN)));
 }
 
-/**
- * Moves the zoom by a number of decades.
- *
- * Additive because the camera holds zoom as a logarithm: a decade is the same
- * sized step wherever in the range it is taken, which is what makes the wheel
- * feel even rather than accelerating.
- */
+/** Moves the zoom by a number of decades. Additive because zoom is a logarithm. */
 export function stepZoom(logScale: number, decades: number): number {
   return clamp(logScale + decades);
 }

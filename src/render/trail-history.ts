@@ -2,43 +2,22 @@ import type { Simulation } from '../sim/simulation';
 import { GLError } from './gl';
 
 /**
- * Where a boid has just been, and what it was doing there.
+ * Recent samples for every boid, in a texture: one column per boid, one row per
+ * sample, each texel `(x, y, speed, density)`. A vertex shader cannot reach a
+ * boid's past through attributes, because an attribute is indexed by instance
+ * or by vertex and never by both, so the trail shader reads this with
+ * `texelFetch`.
  *
- * The ribbon trail needs several past samples *per boid*, and a vertex shader
- * cannot reach them through vertex attributes: an attribute is indexed by
- * instance or by vertex, never by both, and twenty of them would exhaust the
- * attribute slots several times over. So history goes in a texture — one
- * column per boid, one row per recorded sample — and the shader reads it with
- * `texelFetch`, which is an ordinary indexed load and needs no filtering.
+ * The rows are a ring. Each capture overwrites the oldest row instead of
+ * shifting anything, and `newest` says which row that is.
  *
- * It is a **ring**: each capture overwrites the oldest row rather than
- * shifting anything, so recording a sample for five thousand boids is one
- * upload of one row, and {@link newest} says where the front of the queue is.
- *
- * Each texel is `(x, y, speed, density)`. Position is what the ribbon is
- * threaded through; the other two are what it is *coloured* by, and they have
- * to be recorded rather than read from the boid's current state — otherwise a
- * trail is one flat colour that changes along its whole length at once, which
- * says where the boid is now and nothing about where it has been. Recorded,
- * the trail becomes a history of the flight: a boid that just accelerated
- * drags a cooler tail behind a hot nose.
- *
- * Capture is on a fixed cadence tied to simulation steps, never once per
- * frame. A trail is a length of *time* — half a second of flight — and a trail
- * that recorded one sample per frame would be half as long on a machine
- * rendering at 30 fps as on one at 60.
- *
- * This implementation uploads from the CPU, matching `createUploadFeed`. The
- * seam for a GPU backend is the same shape as the feed's: the texture layout
- * and the shader do not change, and the upload becomes a `copyBufferSubData`
- * into a staging buffer followed by a `texSubImage2D` out of
- * `PIXEL_UNPACK_BUFFER` — GPU to GPU, with nothing read back.
+ * Speed and density are recorded per sample rather than read from the boid's
+ * current state. Read live, a trail is one flat colour that changes along its
+ * whole length at once; recorded, a boid that just accelerated drags a cooler
+ * tail behind a hot nose.
  */
 
-/**
- * Rows in the texture, and so the longest trail any style may ask for. At the
- * capture cadence in `app.ts` this is a little under a second of flight.
- */
+/** Rows in the texture, and so the longest trail any style may ask for. */
 export const MAX_TRAIL_POINTS = 24;
 
 /** `(x, y, speed, density)` per sample. */
@@ -54,12 +33,8 @@ export interface TrailHistory {
   capture(): void;
   /**
    * Fills every row for boids `[from, to)` with where they are now, collapsing
-   * their trails to a point.
-   *
-   * Called when the flock is reset and when the count rises. A slot that has
-   * just been handed to a new boid still holds the path of whoever had it
-   * last, and without this the newcomer arrives trailing a streak from
-   * somewhere it has never been.
+   * their trails to a point. Call it on reset and when the count rises: a slot
+   * just handed to a new boid still holds the path of whoever had it last.
    */
   seed(from: number, to: number): void;
   dispose(): void;
@@ -79,9 +54,9 @@ export function createUploadTrailHistory(
 
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, width, height);
-  // Nothing here is ever filtered or wrapped: every read is a texelFetch at an
-  // exact integer coordinate. A 32-bit float texture is not filterable without
-  // an extension anyway, so NEAREST is the only honest setting.
+  // Every read is a texelFetch at an exact texel, so nothing is ever filtered
+  // or wrapped. A 32-bit float texture is not filterable without an extension
+  // anyway.
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -131,10 +106,9 @@ export function createUploadTrailHistory(
       const live = Math.min(width, simulation.count);
       if (live === 0) return;
       newest = (newest + 1) % height;
-      // Only the boids that exist. Slots past `count` hold whatever their last
-      // occupant left, and nothing draws them until `seed` gives them a
-      // present — walking them here would be five thousand square roots a
-      // capture in a flock of two hundred and fifty.
+      // Only the boids that exist. Slots past `count` keep whatever their last
+      // occupant left, nothing draws them until `seed` runs, and gathering them
+      // would cost a square root each every capture.
       gather(0, live);
       gl.bindTexture(gl.TEXTURE_2D, texture);
       upload(0, live, newest);
@@ -157,8 +131,8 @@ export function createUploadTrailHistory(
     },
   };
 
-  // Nothing has a past yet, and an unwritten texture is full of zeroes — which
-  // would trail every boid back to the origin on the first frame.
+  // An unwritten texture is all zeroes, which would trail every boid back to
+  // the origin on the first frame.
   history.seed(0, width);
   return history;
 }

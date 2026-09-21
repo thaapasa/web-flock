@@ -1,21 +1,6 @@
 import type { Simulation } from '../sim/simulation';
 import { createBuffer } from './gl';
 
-/**
- * How per-boid data reaches the GPU.
- *
- * This is the other half of the seam described in `sim/simulation.ts`, and it
- * lives here rather than there because it is a rendering concern: a simulation
- * computes, it does not draw.
- *
- * Splitting it this way is what keeps a future GPU backend a drop-in. The CPU
- * backend produces typed arrays and {@link createUploadFeed} uploads them. A
- * GPU backend would implement both `Simulation` and `BoidFeed`, returning the
- * buffer it just computed into; its `sync` would do nothing and nothing would
- * ever be read back off the GPU. The renderer binds a `BoidFeed` either way and
- * cannot tell the difference.
- */
-
 /** Describes one per-instance attribute well enough for the renderer to bind it. */
 export interface VertexAttributeSource {
   readonly buffer: WebGLBuffer;
@@ -31,26 +16,24 @@ export interface VertexAttributeSource {
 
 /**
  * The buffers the renderer binds, one element per boid, boid `i` at index `i`
- * in every one of them. Valid after {@link BoidFeed.sync}; the renderer must
- * not write to them.
+ * in every one of them. Valid after `sync`; the renderer must not write to
+ * them.
  *
- * Trails are not here, and step 4a is the reason they never will be: the trail
- * the flock kept is a ribbon through where each boid has *been*, which is a
- * history rather than a per-boid value and lives in `trail-history.ts`. A feed
- * says what a boid is now.
+ * A feed says where a boid is now. Where it has been lives in
+ * `trail-history.ts`.
  */
 export interface BoidFeed {
   readonly position: VertexAttributeSource;
   readonly velocity: VertexAttributeSource;
-  /** Neighbour count per boid; see `Simulation.densities`. One float each. */
+  /** Neighbour count per boid, one float each. See `Simulation.densities`. */
   readonly density: VertexAttributeSource;
-  /** Instances to draw. Valid after {@link sync}. */
+  /** Instances to draw. */
   readonly count: number;
   /**
-   * Brings the buffers up to date with the simulation. Called once per frame,
-   * not once per simulation step — with a 120 Hz fixed step against a 60 Hz
-   * display, uploading per step would do the work twice and throw half of it
-   * away. Cheap to call when nothing has moved.
+   * Brings the buffers up to date with the simulation. Call it once per frame,
+   * not once per step: the step runs at 120 Hz against a 60 Hz display, so
+   * uploading per step would throw half the work away. Cheap when nothing has
+   * moved.
    */
   sync(): void;
   dispose(): void;

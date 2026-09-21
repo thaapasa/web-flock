@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { withDefines } from './gl';
 
 /**
- * A GLSL source whose `#version` is not the first line fails to compile, in
- * every shader, with a message that does not mention the real cause. Cheap to
- * get wrong by one line and expensive to recognise, so it is pinned here.
+ * A GLSL source whose `#version` is not the first line fails to compile, and the
+ * message does not name the real cause. Easy to get wrong by one line and hard
+ * to diagnose, so it is pinned here.
  */
 describe('withDefines', () => {
   const source = '#version 300 es\nprecision highp float;\nvoid main() {}\n';

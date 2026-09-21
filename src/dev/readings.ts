@@ -1,40 +1,25 @@
 /**
- * A reading of the running app, in a shape that survives being pasted back.
+ * Frame-time readings, in a shape that survives being pasted back.
  *
- * Claude has no browser and cannot see the app or time a frame — PLAN.md says
- * so, and makes the user the instrument for every performance and feel
- * question. That only works if taking a reading is cheap and handing it back is
- * cheaper, so `p` records the HUD as it stands and prints every reading taken
- * so far as one block: change something, press it again, copy once at the end.
- *
- * A table rather than an object, because an object logged to a console is an
- * interactive tree that copies back as something nobody can read. Step 5 does
- * the same thing for parameter sets, for the same reason.
- *
- * **What was set matters as much as what was measured**, so each row carries
- * its own settings and the ones that changed are printed above it. A header
- * describing only the last state would quietly mislabel every row taken before
- * the knob was turned, which is exactly the mistake a log exists to prevent.
- *
- * This outlives the rest of `dev/`: steps 6, 7a and 8 all ask questions only
- * the user can answer, and all of them want the answer in this shape.
+ * `p` records the HUD as it stands and prints every reading so far, to copy
+ * once at the end. A table rather than an object, because a console prints an
+ * object as a tree that copies back as something nobody can read.
  */
 
 /** One row: what the HUD said, and what was set when it said it. */
 export interface Reading {
   readonly boids: number;
-  /** Whether the ribbon was being drawn. The `t` key's whole purpose. */
   readonly trails: boolean;
   readonly fps: number;
   readonly frameMs: number;
   readonly worstMs: number;
   readonly simMs: number;
   readonly steps: number;
-  /** True when the accumulator had to drop time: already in slow motion. */
+  /** True when the frame loop had to drop time: already in slow motion. */
   readonly behind: boolean;
-  /** CSS pixels per world unit. Fill cost rides on this. */
+  /** CSS pixels per world unit. It sets how much the GPU has to fill. */
   readonly scale: number;
-  /** The flock's live density band: how crowded it had become. */
+  /** The flock's density band: how crowded it was. */
   readonly band: number;
   readonly settings: ReadingSettings;
 }
@@ -55,7 +40,6 @@ export interface ReadingSettings {
 export interface ReadingLog {
   /** Records a reading and returns every reading so far, ready to copy. */
   add(reading: Reading): string;
-  /** Starts a fresh table. */
   clear(): void;
   readonly length: number;
 }
@@ -111,7 +95,7 @@ function format(readings: readonly Reading[], gpu: string): string {
     const changed = changes(reading.settings, previous);
     if (changed) {
       lines.push(changed);
-      // The column header follows the first settings line, so the widths are
+      // The header follows the first settings line, so the columns are
       // established before any numbers appear under them.
       if (!previous) lines.push(row(COLUMNS));
     }
@@ -155,11 +139,8 @@ export function createReadingLog(gpu: string): ReadingLog {
 }
 
 /**
- * What the GPU calls itself, when it will say.
- *
- * The user has two machines with different answers, and a reading that does
- * not say which one it came from is worth much less. Browsers may withhold it
- * for fingerprinting reasons, so a missing name is normal rather than an error.
+ * What the GPU calls itself. A reading is worth much less without it, and a
+ * browser may withhold the name, so an unknown one is normal.
  */
 export function describeRenderer(gl: WebGL2RenderingContext): string {
   const info = gl.getExtension('WEBGL_debug_renderer_info');

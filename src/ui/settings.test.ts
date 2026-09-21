@@ -33,8 +33,6 @@ describe('simParams', () => {
     expect(simParams(settings).cursorStrength).toBe(400);
   });
 
-  // `nothing` is a mode rather than a zero on the strength slider, so that
-  // putting the cursor down does not also lose the strength it was set to.
   it('leaves the strength alone when the mode is nothing', () => {
     const settings = defaultSettings();
     settings.cursor.strength = 400;
@@ -54,8 +52,8 @@ describe('simParams', () => {
     }
   });
 
-  // The default set has to survive the trip out through the panel's shape and
-  // back, or a cold start would already differ from what `sim/params.ts` says.
+  // A cold start must match `sim/params.ts` after the round trip through the
+  // panel's shape.
   it('reproduces the default parameters exactly', () => {
     expect(simParams(defaultSettings())).toEqual({ ...DEFAULT_SIM_PARAMS });
   });
@@ -93,9 +91,6 @@ describe('parse', () => {
     expect(settings.look).toEqual(defaultSettings().look);
   });
 
-  // The blob comes from a store the user can edit and from older builds of this
-  // app, so a bad field is ordinary. Losing the whole set to one of them would
-  // be the wrong trade: everything else in it is still good.
   it.each([
     ['a string where a number belongs', { flock: { count: 'lots', maxSpeed: 42 } }],
     ['a NaN', { flock: { count: NaN, maxSpeed: 42 } }],
@@ -113,8 +108,6 @@ describe('parse', () => {
     expect(settings.flock).not.toHaveProperty('nonsense');
   });
 
-  // A preset renamed in 7b must leave the panel pointing at something that
-  // exists, rather than at a name nothing in the list answers to.
   it('falls back when a preset name no longer exists', () => {
     const settings = parse(stored({ look: { boid: 'gone', grid: 'also gone' } }));
     expect(settings.look.boid).toBe(defaultSettings().look.boid);
@@ -148,8 +141,6 @@ describe('parse', () => {
 });
 
 describe('copyInto', () => {
-  // The panel binds to the objects inside a set and holds those references for
-  // as long as it lives, so a reset has to write through them, not past them.
   it('writes through the existing objects', () => {
     const target = defaultSettings();
     const flock = target.flock;
@@ -183,8 +174,6 @@ describe('boidStyle', () => {
     expect(style.name).toBe(BOID_PRESETS[0].name);
   });
 
-  // Read once per pane per frame, so a fresh object every time would be garbage
-  // the renderer never asked for.
   it('hands back the same object for the same overrides', () => {
     const look = defaultSettings().look;
     look.trails = false;
@@ -211,8 +200,6 @@ describe('exportLiteral', () => {
     expect(text).toContain(`follow ${settings.camera.follow ? 'on' : 'off'}`);
   });
 
-  // It is meant to be pasted into `sim/params.ts`, so the body has to be a
-  // literal that evaluates to the parameters it came from.
   it('is a literal that evaluates back to the same parameters', () => {
     const body = text.slice(text.indexOf('{'));
     const parsed = JSON.parse(
@@ -221,8 +208,8 @@ describe('exportLiteral', () => {
 
     expect(Object.keys(parsed).sort()).toEqual(Object.keys(DEFAULT_SIM_PARAMS).sort());
     for (const key of Object.keys(DEFAULT_SIM_PARAMS) as (keyof SimParams)[]) {
-      // Six significant figures, so an angle that `sim/params.ts` writes as a
-      // multiple of pi comes back rounded rather than exact.
+      // Six significant figures, so an angle written as a multiple of pi comes
+      // back rounded rather than exact.
       expect(parsed[key]).toBeCloseTo(DEFAULT_SIM_PARAMS[key], 4);
     }
   });

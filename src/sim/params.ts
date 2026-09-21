@@ -1,12 +1,6 @@
 /**
- * Everything the user can change about the flock's behaviour.
- *
- * Plain data on purpose: no methods, no class, nothing that holds a reference
- * to a backend. A parameter set is something you can clone, diff, serialise to
- * localStorage, paste into a chat, and hand to a GPU backend as a uniform
- * block without translation.
- *
- * Every field takes effect on the next `step`, with no restart — see CLAUDE.md.
+ * Everything the user can change about the flock's behaviour. Every field takes
+ * effect on the next step, with no restart.
  */
 export interface SimParams {
   /** How many boids are simulated. Never exceeds the backend's capacity. */
@@ -15,24 +9,20 @@ export interface SimParams {
   /**
    * Boids closer than this push each other apart. World units.
    *
-   * Chosen by eye in 4b, and the one parameter in this file that is not just a
-   * starting point. At 6 against a five-unit mark the flock flew nose to tail
-   * and every trail crossed every other; at 12 they are close without
-   * overlapping. It is also what made five thousand boids affordable — a
-   * looser flock is a thinner one, and the neighbour search costs the square
-   * of how many neighbours there are. Density band 199 to 43, and the step
-   * from 11.5 ms to 4.0 ms.
+   * The one value here that is not just a starting point. At 6 against a
+   * five-unit mark the flock flew nose to tail and every trail crossed every
+   * other; at 12 they are close without overlapping. A looser flock is also a
+   * cheaper one, since the neighbour search costs the square of how many
+   * neighbours there are: the step went from 11.5 ms to 4.0 ms.
    */
   separationRadius: number;
   /** Neighbourhood radius for alignment and cohesion. World units. */
   neighbourRadius: number;
   /**
-   * Half-angle of the forward field of view, in radians. Neighbours outside it
-   * are ignored, which is what stops the flock collapsing into a uniform ball.
-   *
-   * Applies to alignment and cohesion only. Separation stays omnidirectional:
-   * you feel a crowd pressing on you from behind whether or not you can see it,
-   * and a blind spot in the rule that prevents collisions reads as a bug.
+   * Half-angle of the forward field of view, in radians. Alignment and cohesion
+   * ignore neighbours outside it, which is what stops the flock collapsing into
+   * a uniform ball. Separation stays omnidirectional: a blind spot in the rule
+   * that prevents collisions reads as a bug.
    */
   fieldOfView: number;
 
@@ -40,14 +30,10 @@ export interface SimParams {
   alignmentWeight: number;
   cohesionWeight: number;
   /**
-   * Cap on the combined steering acceleration of the three rules above, in
-   * world units per second squared.
-   *
-   * It is what makes the three weights a *ratio* rather than three unbounded
-   * numbers. Without it, raising one weight both changes the balance between
-   * the rules and makes every boid snap harder, so no slider does one legible
-   * thing. External forces — origin pull, cursor, wander — are added after this
-   * cap, so the cursor can always overpower flocking.
+   * Caps the combined steering of the three rules above, in world units per
+   * second squared. It is what makes the weights a ratio: without it, raising
+   * one weight both shifts the balance and makes every boid snap harder, so no
+   * slider does one legible thing.
    */
   maxForce: number;
 
@@ -61,9 +47,7 @@ export interface SimParams {
 
   /**
    * Steering jitter, world units per second squared. Keeps a flock that has
-   * found equilibrium from freezing into a lattice. Drawn from a per-boid
-   * stream, so it is jitter rather than a shared nudge, and it is still exactly
-   * reproducible from the seed.
+   * found equilibrium from freezing into a lattice.
    */
   wanderStrength: number;
   /** How fast a boid's wander direction drifts, in radians per second. */
@@ -78,10 +62,7 @@ export interface SimParams {
   spawnRadius: number;
 }
 
-/**
- * Starting point, not an answer. Real values come out of step 7a, where they
- * are found by watching the thing rather than reasoning about it.
- */
+/** A starting point, not an answer. The real values come from watching it fly. */
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
 

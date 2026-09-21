@@ -1,7 +1,6 @@
 /**
- * A thin WebGL2 helper. Not an engine: it removes the boilerplate around
- * compiling, linking, describing vertex layout and issuing instanced draws,
- * and gets out of the way. Everything else is raw `gl.*` at the call site.
+ * A thin WebGL2 helper for compiling, linking, vertex layout and instanced
+ * draws. Everything else is raw `gl.*` at the call site.
  */
 
 export class GLError extends Error {}
@@ -13,8 +12,7 @@ export function getContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
     depth: false,
     stencil: false,
     premultipliedAlpha: false,
-    // The grid and the boids both draw every frame, so there is nothing worth
-    // preserving between them.
+    // Every frame redraws the whole scene, so there is nothing to preserve.
     preserveDrawingBuffer: false,
     powerPreference: 'high-performance',
   });
@@ -83,9 +81,9 @@ export function createProgram(
 }
 
 /**
- * Looks up every named uniform at once. A missing name yields `null` rather
- * than throwing: a uniform the compiler optimised away is normal, and the
- * `gl.uniform*` calls against `null` are silently ignored.
+ * Looks up every named uniform at once. A missing name gives `null` rather than
+ * throwing: the compiler drops a uniform the shader does not use, and
+ * `gl.uniform*` ignores a `null` location.
  */
 export function getUniformLocations<const N extends readonly string[]>(
   gl: WebGL2RenderingContext,
@@ -108,9 +106,8 @@ export function createBuffer(
   const buffer = gl.createBuffer();
   if (!buffer) throw new GLError('Could not create buffer');
   gl.bindBuffer(target, buffer);
-  // The two branches look identical but resolve to different `bufferData`
-  // overloads: allocate-by-size versus upload-from-view. The union type matches
-  // neither on its own.
+  // The branches look identical but pick different `bufferData` overloads:
+  // allocate by size, or upload from a view. The union type matches neither.
   if (typeof data === 'number') {
     gl.bufferData(target, data, usage);
   } else {
@@ -120,11 +117,7 @@ export function createBuffer(
   return buffer;
 }
 
-/**
- * A rectangle of the drawing buffer, in device pixels, **y measured from the
- * bottom** as GL viewports are. The whole buffer for a normal frame; one
- * quadrant at a time in comparison mode.
- */
+/** A rectangle of the drawing buffer, in device pixels, y from the bottom. */
 export interface ViewportRect {
   x: number;
   y: number;
@@ -137,7 +130,6 @@ export interface AttributeSpec {
   /** `layout(location = N)` in the vertex shader. */
   location: number;
   buffer: WebGLBuffer;
-  /** Components per element: 1..4. */
   size: 1 | 2 | 3 | 4;
   /** Defaults to `gl.FLOAT`. */
   type?: number;
@@ -146,12 +138,9 @@ export interface AttributeSpec {
   stride?: number;
   /** Byte offset of the first element. */
   offset?: number;
-  /**
-   * 0 advances per vertex, 1 advances per instance. Anything above 1 advances
-   * once every N instances.
-   */
+  /** 0 advances per vertex, 1 per instance, N once every N instances. */
   divisor?: number;
-  /** Use `vertexAttribIPointer`, for integer attributes read as integers. */
+  /** Bind with `vertexAttribIPointer`, which keeps integers as integers. */
   integer?: boolean;
 }
 
@@ -220,19 +209,13 @@ export function drawInstanced(
 }
 
 /**
- * Prepends `#define`s to a shader.
+ * Prepends `#define`s to a shader, after `#version`, which GLSL requires to be
+ * the first line. A `.vert` file cannot read a TypeScript constant, so values
+ * that must agree with the CPU side are injected here rather than written out
+ * in both places, where they would drift.
  *
- * Shaders live in their own `.vert` and `.frag` files, which an editor can
- * highlight and a GLSL tool can parse — but a file cannot read a TypeScript
- * constant, and a constant repeated in both places is one that will drift. So
- * the values that must agree with the CPU side are injected here instead of
- * being written twice.
- *
- * `#version` has to be the first thing in a GLSL source, so the defines go
- * after it rather than at the top. That shifts the line numbers the compiler
- * reports relative to the file on disk; {@link createProgram} prints the
- * assembled source on failure, so the numbers in an error message still match
- * the listing printed beside it.
+ * The defines shift the line numbers the compiler reports. `createProgram`
+ * prints the assembled source on failure, so the numbers still match.
  */
 export function withDefines(source: string, defines: Record<string, number>): string {
   const lines = Object.entries(defines).map(([name, value]) => `#define ${name} ${value}`);

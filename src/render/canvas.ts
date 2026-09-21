@@ -1,15 +1,3 @@
-/**
- * Keeps a canvas exactly the size of its CSS box, in real device pixels.
- *
- * Two sizes matter and are easy to confuse:
- *
- * - **CSS pixels** are what pointer events and the camera's viewport use.
- * - **Device pixels** are what the drawing buffer and `gl.viewport` use.
- *
- * `devicePixelRatio` is the ratio between them, and it changes at runtime when
- * a window moves between displays or the page is zoomed.
- */
-
 export interface CanvasSize {
   /** CSS pixels. Pointer coordinates are in this space. */
   readonly width: number;
@@ -29,9 +17,9 @@ export interface ResizingCanvas {
 }
 
 /**
- * Observes `canvas` and resizes its drawing buffer to match. Prefers the
- * browser's exact device-pixel box where available, which avoids the rounding
- * seam you get from multiplying a CSS size by a fractional `devicePixelRatio`.
+ * Keeps the canvas drawing buffer the size of its CSS box. Prefers the exact
+ * device-pixel box where the browser reports one, which avoids the rounding
+ * seam from multiplying a CSS size by a fractional `devicePixelRatio`.
  */
 export function createResizingCanvas(canvas: HTMLCanvasElement): ResizingCanvas {
   const listeners = new Set<(size: CanvasSize) => void>();
@@ -60,10 +48,10 @@ export function createResizingCanvas(canvas: HTMLCanvasElement): ResizingCanvas 
   });
   observer.observe(canvas, { box: 'content-box' });
 
-  // ResizeObserver does not fire when only devicePixelRatio changes, which
-  // happens when the window is dragged to a display with a different scale.
-  // This media query matches the current ratio exactly, so it stops matching
-  // the moment the ratio changes. It is one-shot, hence the re-arming.
+  // ResizeObserver does not fire when only devicePixelRatio changes, which it
+  // does when the window moves to a display with a different scale. The query
+  // matches the current ratio exactly, so it stops matching as soon as the
+  // ratio changes, and it has to be re-armed after each change.
   let ratioQuery: MediaQueryList | undefined;
   const watchPixelRatio = (): void => {
     ratioQuery?.removeEventListener('change', onRatioChange);

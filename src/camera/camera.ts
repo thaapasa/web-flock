@@ -1,32 +1,17 @@
 import type { Bounds, Vec2 } from '../math/types';
 
 /**
- * The world/screen transform.
+ * World space has +y up and screen space has +y down. The flip happens here and
+ * nowhere else.
  *
- * Two conventions run through the whole project and are set here:
- *
- * 1. **World space has +y up.** Screen space has +y down, as the DOM does. The
- *    flip lives in this file and nowhere else, so nothing downstream of the
- *    camera has to think about it.
- *
- * 2. **Zoom is held as a base-10 logarithm**, `logScale = log10(pixels per
- *    world unit)`. Everything that cares about zoom wants it that way: the
- *    grid fades one decade at a time, so `Math.floor(logScale)` names the
- *    decade currently on screen and the fractional part is how far through the
- *    handover we are. Multiplicative zoom steps become plain addition, and
- *    damping toward a target zoom is linear in this space, which is what makes
- *    it feel even rather than accelerating.
- *
- * The viewport is measured in **CSS pixels**, matching pointer coordinates.
- * Device pixels only matter to `gl.viewport` and to line widths in shaders;
- * the clip-space transform is the same either way, because it depends on the
- * ratio of scale to viewport size rather than on either one alone.
+ * The camera holds zoom as `logScale`, the base-10 logarithm of CSS pixels per
+ * world unit. The viewport is in CSS pixels too, matching pointer coordinates.
  */
 
 export interface CameraOptions {
   /** World point at the centre of the viewport. Defaults to the origin. */
   center?: Vec2;
-  /** log10(CSS pixels per world unit). Defaults to 0, i.e. 1 pixel per unit. */
+  /** Defaults to 0, one CSS pixel per world unit. */
   logScale?: number;
   /** CSS pixels. */
   viewportWidth?: number;
@@ -34,7 +19,7 @@ export interface CameraOptions {
 }
 
 export class Camera {
-  /** World point at the centre of the viewport. Mutate via {@link setCenter}. */
+  /** World point at the centre. Move it with setCenter, or the transform goes stale. */
   readonly center: Vec2 = { x: 0, y: 0 };
 
   private _logScale: number;
@@ -71,7 +56,7 @@ export class Camera {
     return this._scale;
   }
 
-  /** World units per CSS pixel. The natural unit for "how big is a pixel". */
+  /** World units per CSS pixel. */
   get worldPerPixel(): number {
     return 1 / this._scale;
   }
@@ -101,22 +86,19 @@ export class Camera {
     this._worldToClipDirty = true;
   }
 
-  /**
-   * Zooms by a number of decades: +1 makes the world ten times larger on
-   * screen. Additive here because zoom is logarithmic.
-   */
+  /** +1 makes the world ten times larger on screen. */
   zoomByDecades(decades: number): void {
     this.logScale = this._logScale + decades;
   }
 
-  /** Screen coordinates are CSS pixels from the top-left, **+y down**. */
+  /** Screen coordinates are CSS pixels from the top-left, +y down. */
   worldToScreen(worldX: number, worldY: number, out: Vec2 = { x: 0, y: 0 }): Vec2 {
     out.x = (worldX - this.center.x) * this._scale + this._viewportWidth / 2;
     out.y = this._viewportHeight / 2 - (worldY - this.center.y) * this._scale;
     return out;
   }
 
-  /** Screen coordinates are CSS pixels from the top-left, **+y down**. */
+  /** Screen coordinates are CSS pixels from the top-left, +y down. */
   screenToWorld(screenX: number, screenY: number, out: Vec2 = { x: 0, y: 0 }): Vec2 {
     out.x = this.center.x + (screenX - this._viewportWidth / 2) / this._scale;
     out.y = this.center.y - (screenY - this._viewportHeight / 2) / this._scale;
@@ -135,14 +117,11 @@ export class Camera {
   }
 
   /**
-   * World space to clip space, as a column-major `mat3` ready for a `uniformMatrix3fv`.
+   * World space to clip space, as a column-major `mat3` for `uniformMatrix3fv`.
+   * Clip space has +y up, so nothing flips here.
    *
-   * Clip space already has +y up, so there is no flip here — the flip is only
-   * in {@link worldToScreen} and {@link screenToWorld}, which speak the DOM's
-   * y-down language.
-   *
-   * The returned array is owned by the camera and rewritten in place, so treat
-   * it as valid only until the next camera change.
+   * The camera owns the array and rewrites it in place, so it is valid only
+   * until the camera next changes.
    */
   worldToClip(): Float32Array {
     if (this._worldToClipDirty) {

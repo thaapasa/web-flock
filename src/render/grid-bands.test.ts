@@ -82,10 +82,10 @@ describe('band selection', () => {
 
 describe('handover continuity', () => {
   /**
-   * The one that matters: scrolling must not make the picture pop. A line's
-   * brightness is sampled either side of a very small zoom change, everywhere
-   * across six decades of zoom, and the jump is required to stay far below
-   * anything an eye would read as an edge.
+   * The one that matters: zooming must not make the picture pop. A line's
+   * brightness is sampled either side of a very small zoom change, across six
+   * decades of zoom, and the jump has to stay far below what an eye reads as
+   * an edge.
    */
   it.each(PRESET_CASES)('moves no line brightness abruptly (%s)', (_name, style: GridStyle) => {
     const bands = createBands();
@@ -106,11 +106,10 @@ describe('handover continuity', () => {
   });
 
   /**
-   * Zooming in gives every line more room, and a line that has more room must
-   * never be drawn dimmer than it was. Stated as a direction rather than as a
-   * value, so that retuning the default style by eye cannot make it wrong —
-   * what it forbids is a coarse line dipping as a finer decade appears under
-   * it, which is the failure that would read as the grid flickering.
+   * Zooming in gives every line more room, and a line with more room must
+   * never be drawn dimmer than it was. A direction rather than a value, so
+   * retuning a style by eye cannot make it wrong. What it forbids is a coarse
+   * line dipping as a finer decade appears under it, which reads as flicker.
    */
   it.each(PRESET_CASES)('never dims a line as it gains room (%s)', (_name, style: GridStyle) => {
     const bands = createBands();
@@ -127,9 +126,8 @@ describe('handover continuity', () => {
 
   it('gives a line the brightness of the coarsest decade it belongs to', () => {
     const bands = createBands();
-    // A style written out here rather than the default one: this asserts the
-    // structure of the result, and structure should not move when the default
-    // is retuned by eye.
+    // Its own style rather than the default: the structure asserted below
+    // should not move when the default is retuned by eye.
     const count = computeBands(1, { ...DEFAULT_GRID_STYLE, minPixelSpacing: 9 }, bands);
     // At 1 px per unit with a 9 px minimum, the decades on screen start at 1.
     expect(bands[0].exponent).toBe(1);
@@ -163,8 +161,8 @@ describe('phase reduction', () => {
   });
 
   it('stays sub-pixel accurate far from the origin, where float32 would not', () => {
-    // A million world units out at 40 px per unit: what reaches the shader must
-    // still be a small number, not the difference of two large ones.
+    // A million world units out at 40 px per unit: what reaches the shader is
+    // still a small number, not the difference of two large ones.
     expect(bandPhase(1_000_000.37, 0, 40)).toBeCloseTo(14.8, 6);
   });
 });

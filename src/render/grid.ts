@@ -9,25 +9,14 @@ import type { GridStyle } from './grid-style';
 import { ORIGIN_MARKER_CODES } from './grid-style';
 
 /**
- * The adaptive axis grid.
+ * The adaptive axis grid. `grid-bands.ts` picks the decades and their weights;
+ * what is left here is geometry and antialiasing.
  *
- * One fullscreen triangle, one draw call, no geometry: every line is found
- * per-pixel from the distance to the nearest multiple of each visible decade.
- * That is what makes it unbounded — there is no vertex buffer to run out of,
- * and a line ten million units from the origin costs exactly what one at the
- * origin costs.
- *
- * Which decades are visible and how bright each one is comes out of
- * `grid-bands.ts`, on the CPU, where it is testable. What is left here is
- * geometry and antialiasing.
- *
- * **Everything in the shader is in device pixels.** Not world units: a world
- * unit is a bad numeric neighbourhood to work in once the flock has migrated a
- * few hundred thousand units out, because float32 runs out of mantissa and the
- * lines start to shimmer. Pixel offsets relative to the camera centre are
- * always small, whatever the camera is looking at, so the shader never handles
- * a large number at all. The reduction that makes that true is `bandPhase`,
- * done once per decade per frame in float64.
+ * Everything the shader sees is in device pixels, never world units. Once the
+ * flock has migrated a few hundred thousand units out, float32 runs out of
+ * mantissa and the lines shimmer. A pixel offset from the camera centre stays
+ * small whatever the camera is looking at, and `bandPhase` does the reduction
+ * that keeps it small, once per decade per frame in float64.
  */
 
 const UNIFORM_NAMES = [
@@ -50,13 +39,12 @@ const UNIFORM_NAMES = [
 ] as const;
 
 /**
- * Where the cursor force reaches, in world units, or null for no ring.
+ * Where the cursor force reaches.
  *
- * The grid draws it because PLAN.md asks for the radius to be drawn on the
- * grid, and because the grid is already the thing that can draw a circle of an
- * exact world radius crisply at any zoom. It costs one branch in a shader that
- * was running anyway -- a separate pass would need blending turned back on,
- * which `boids.ts` deliberately leaves off.
+ * The grid draws the ring because it can already put a circle of an exact
+ * world radius on screen crisply at any zoom, for one branch in a shader that
+ * runs anyway. A separate pass would need blending, which `boids.ts` leaves
+ * off.
  */
 export interface CursorRing {
   /** World position of the pointer. */
@@ -78,7 +66,7 @@ export interface GridRenderer {
     rect: ViewportRect,
     cursor: CursorRing | null,
   ): void;
-  /** The decades drawn by the last call, finest first. Valid for labelling. */
+  /** The decades drawn by the last call, finest first. */
   readonly bands: readonly GridBand[];
   readonly bandCount: number;
   dispose(): void;
@@ -110,9 +98,8 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
     },
 
     draw(camera, pixelRatio, style, rect, cursor): void {
-      // Band selection works in CSS pixels, because that is the unit the style
-      // is written in and what makes the grid look equally dense on a 1x
-      // display and a Retina one. Only the upload converts to device pixels.
+      // Band selection works in CSS pixels, the unit the style is written in.
+      // Only the upload converts to device pixels.
       liveBands = computeBands(camera.scale, style, bands);
       const devicePixelsPerUnit = camera.scale * pixelRatio;
 
@@ -138,7 +125,7 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       gl.uniform1f(uniforms.uBrightness, style.brightness);
 
       // The origin is only ever a screenful or so away in the cases that
-      // matter; when it is millions of pixels off it is off screen, and a
+      // matter. When it is millions of pixels off it is off screen, so a
       // float32 that has lost its low bits by then costs nothing.
       gl.uniform2f(
         uniforms.uOriginOffset,
@@ -151,10 +138,9 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       gl.uniform1f(uniforms.uOriginRadius, style.originRadius * pixelRatio);
       gl.uniform1f(uniforms.uOriginBoost, style.originBoost);
 
-      // World units, so the ring grows and shrinks with the zoom rather than
-      // staying a fixed circle on screen: it is a distance in the flock's
-      // world, and it has to read as one. The offset is small whatever the
-      // camera is looking at, because the pointer is on screen by definition.
+      // The radius is a distance in the flock's world, so the ring grows and
+      // shrinks with the zoom. The offset stays small whatever the camera is
+      // looking at, because the pointer is on screen.
       const radius = cursor ? cursor.radius * devicePixelsPerUnit : 0;
       gl.uniform2f(
         uniforms.uCursorOffset,

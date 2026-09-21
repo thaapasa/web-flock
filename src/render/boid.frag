@@ -2,18 +2,9 @@
 precision highp float;
 
 /**
- * The chevron, as a distance field.
- *
- * Two strokes from the nose to the two tail tips, measured per pixel and
- * covered with the same box filter the grid uses — which is what keeps a boid
- * crisp when it is large and lets it fade honestly rather than fattening when
- * it is smaller than a pixel. Stroke weight, and later a glow, are then a
- * number rather than a mesh.
- *
- * The trail is not here. It was, while step 4a was still deciding between a
- * streak along the velocity and a ribbon through the boid's recent positions;
- * the ribbon won, and it has its own shader because it needs geometry this one
- * cannot give it.
+ * The chevron as a distance field: two strokes from the nose to the two tail
+ * tips, measured per pixel and covered with the same box filter the grid uses.
+ * Stroke weight is then a number rather than a mesh.
  */
 
 in vec2 vLocal;

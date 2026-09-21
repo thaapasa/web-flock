@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { formatTick } from './overlay';
 
 /**
- * `exponent` is the decade the tick belongs to, which is what decides how many
- * digits carry information. Both formats are driven by it, so both are checked
- * against the same ladder of decades rather than against isolated numbers.
+ * `exponent` is the decade the tick belongs to, and it decides how many digits
+ * carry information. Both formats read it, so both run against the same ladder
+ * of decades rather than against isolated numbers.
  */
 describe('tick formatting', () => {
   it.each([

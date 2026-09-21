@@ -19,21 +19,18 @@ const EPSILON = 1e-9;
 /**
  * How far above the mean neighbour count the density band's top sits.
  *
- * A percentile would be the honest statistic, but a percentile needs a sort,
- * and this is recomputed every step. Mean plus a fixed number of standard
- * deviations is one pass over the sample, lands near the ninetieth percentile
- * for counts spread like these, and — the part that actually matters — moves
- * with the flock instead of jumping when one boid crosses a rank boundary.
+ * A percentile would be the honest statistic, but it needs a sort and this
+ * runs every step. Mean plus a fixed number of standard deviations takes one
+ * pass, lands near the ninetieth percentile for counts spread like these, and
+ * moves with the flock instead of jumping when one boid crosses a rank
+ * boundary.
  */
 const DENSITY_SIGMAS = 1.5;
 
 /**
- * Seconds the density band takes to follow a change.
- *
- * It is the divisor of a colour, so it must not jitter: a band twitching frame
- * to frame makes the whole flock shimmer between hues while nothing about the
- * flock has changed. Slow enough to be invisible, fast enough to catch up
- * within a second or two of the count slider moving.
+ * Seconds the density band takes to follow a change. The band divides a colour,
+ * so a band twitching step to step shimmers the whole flock between hues while
+ * nothing about the flock has changed.
  */
 const DENSITY_TIME_CONSTANT = 1.5;
 
@@ -45,27 +42,18 @@ interface MutableSample {
 }
 
 /**
- * The CPU flocking backend.
+ * The CPU flocking backend. Classic Reynolds steering: each rule proposes a
+ * desired velocity, the difference from the current velocity is a steering
+ * force, and the three are summed by weight and clamped to `maxForce`.
  *
- * Classic Reynolds steering: each rule proposes a *desired velocity*, the
- * difference from the current velocity is a steering force, the three are
- * summed by weight and clamped to `maxForce`. That last clamp is what makes the
- * weights behave like a ratio instead of three unbounded gains.
+ * The two passes cannot be merged. Fusing them would let a boid see its
+ * neighbours' already-updated positions, so the result would depend on
+ * iteration order and the flock would grow a grain along the index axis. That
+ * reads as bad tuning rather than as a bug.
  *
- * Two passes per step, and they cannot be merged: the first reads positions to
- * compute accelerations, the second writes positions. Fusing them would let a
- * boid see its neighbours' already-updated positions, making the result depend
- * on iteration order — the flock would develop a grain running along the index
- * axis, which is the kind of bug that looks like bad tuning.
- *
- * Pass one walks boids in *cell order* rather than index order. It costs
- * nothing (the pass only reads, so order cannot change the result) and buys
- * two things: consecutive boids share a neighbourhood, so the 3x3 block of
- * candidate cells is gathered once for roughly ten boids instead of once each,
- * and their positions are adjacent in memory.
- *
- * Correctness only. Whether the numbers here produce something that *looks*
- * like a flock is step 7a's problem; see PLAN.md for why those are kept apart.
+ * Pass one walks boids in cell order rather than index order. It only reads, so
+ * order cannot change the result, and consecutive boids then share a
+ * neighbourhood: one gather of the 3x3 block serves roughly ten of them.
  */
 class Flock implements Simulation {
   readonly capacity: number;
@@ -84,7 +72,7 @@ class Flock implements Simulation {
   private readonly sampleState: MutableSample;
 
   private readonly rangeState: { minSpeed: number; maxSpeed: number; maxDensity: number };
-  /** Where {@link rangeState}'s density is heading, before smoothing. */
+  /** Where the density band is heading, before smoothing. */
   private densityTarget = 0;
 
   private params: SimParams;
@@ -115,8 +103,7 @@ class Flock implements Simulation {
 
     this.rangeState = { minSpeed: 0, maxSpeed: 0, maxDensity: 1 };
     this._count = clampCount(this.params.count, this.capacity);
-    // Replaced immediately by reset(); assigned here only because TypeScript
-    // cannot see that the call below initialises it.
+    // reset() replaces this. Assigned here because TypeScript cannot see that.
     this.spawnRandom = createRandom(0);
     this.reset(options.seed);
   }
@@ -190,10 +177,10 @@ class Flock implements Simulation {
     const minSpeed = Math.min(Math.max(p.minSpeed, 0), maxSpeed);
     const maxForce = Math.max(p.maxForce, 0);
 
-    // The field-of-view test is `dot >= cos(fov) * distance`, which would need
-    // a square root per candidate. Squaring both sides removes it, at the cost
-    // of splitting on the sign: for a view wider than a half-circle anything
-    // ahead is automatically visible, for a narrower one nothing behind can be.
+    // The field-of-view test is `dot >= cos(fov) * distance`, which needs a
+    // square root per candidate. Squaring both sides removes it, at the cost of
+    // splitting on the sign: a view wider than a half-circle sees everything
+    // ahead, a narrower one sees nothing behind.
     const cosFieldOfView = Math.cos(clamp(p.fieldOfView, 0, Math.PI));
     const cosFieldOfView2 = cosFieldOfView * cosFieldOfView;
     const wideFieldOfView = cosFieldOfView <= 0;
@@ -207,8 +194,7 @@ class Flock implements Simulation {
     const entryCellX = this.hash.entryCellX;
     const entryCellY = this.hash.entryCellY;
 
-    // --- Pass one: accelerations, from positions nobody has moved yet.
-    //
+    // Pass one: accelerations, from positions nobody has moved yet.
     // NaN is not a possible cell coordinate, so the first boid always gathers.
     let blockCellX = NaN;
     let blockCellY = NaN;
@@ -251,15 +237,15 @@ class Flock implements Simulation {
         if (distance2 < EPSILON) continue;
 
         if (distance2 <= separationRadius2) {
-          // Away from the neighbour, falling off as 1/distance: a boid almost
-          // touching another must dominate one merely nearby.
+          // Points away from the neighbour and falls off as 1/distance, so a
+          // boid almost touching another dominates one merely nearby.
           separationX -= dx / distance2;
           separationY -= dy / distance2;
         }
 
         if (distance2 <= neighbourRadius2) {
-          // Before the field-of-view test, not after: density is how crowded it
-          // is here, which is not a directional question. See Simulation.densities.
+          // Counted before the field-of-view test, since crowding is not a
+          // directional question. See Simulation.densities.
           crowd++;
           const dot = dx * headingX + dy * headingY;
           const inView = wideFieldOfView
@@ -305,9 +291,9 @@ class Flock implements Simulation {
         }
       }
 
-      // The cap covers the three flocking rules only. Everything below is an
-      // external force and is allowed to exceed it — the cursor especially,
-      // which has to visibly win.
+      // The cap covers the three flocking rules only. The origin pull, the
+      // cursor and wander are added after it, so the cursor can always
+      // overpower flocking.
       const force = Math.sqrt(ax * ax + ay * ay);
       if (force > maxForce) {
         const scale = maxForce / force;
@@ -315,9 +301,9 @@ class Flock implements Simulation {
         ay *= scale;
       }
 
-      // A linear spring on the origin. Negligible near it, so the flock
-      // migrates freely, and unbounded far from it, so escape is impossible
-      // rather than merely unlikely.
+      // A linear spring: negligible near the origin, so the flock migrates
+      // freely, and unbounded far from it, so escape is impossible rather than
+      // unlikely.
       ax -= p.originPull * x;
       ay -= p.originPull * y;
 
@@ -346,12 +332,10 @@ class Flock implements Simulation {
       this.densities[i] = crowd;
     }
 
-    // --- Pass two: integrate.
-    //
-    // The turn limit is an angle, but no per-boid trigonometry is needed: the
-    // limit is the same for every boid this step, so its sine and cosine are
-    // computed once and a boid that exceeds it is simply rotated by that fixed
-    // angle. Above pi there is nothing to limit — every heading is reachable.
+    // Pass two: integrate. The turn limit is an angle, but it is the same angle
+    // for every boid this step, so one sine and cosine serve all of them and a
+    // boid that exceeds the limit is rotated by that fixed angle. Above pi
+    // there is nothing to limit, since every heading is reachable.
     const maxTurn = Math.min(Math.max(p.maxTurnRate, 0) * dt, Math.PI);
     const cosMaxTurn = Math.cos(maxTurn);
     const sinMaxTurn = Math.sin(maxTurn);
@@ -367,9 +351,9 @@ class Flock implements Simulation {
       const steeredY = vy + accelerations[i * 2 + 1] * dt;
       const steeredSpeed = Math.sqrt(steeredX * steeredX + steeredY * steeredY);
 
-      // Written as a positive test so that a NaN anywhere upstream lands here
-      // and is replaced by the previous heading, rather than propagating into
-      // a position and corrupting the flock permanently.
+      // A positive test, so a NaN from anywhere upstream lands here and is
+      // replaced by the previous heading instead of reaching a position and
+      // corrupting the flock for good.
       const usable = steeredSpeed > EPSILON;
       let dirX = usable ? steeredX / steeredSpeed : oldX;
       let dirY = usable ? steeredY / steeredSpeed : oldY;
@@ -434,12 +418,10 @@ class Flock implements Simulation {
   }
 
   /**
-   * Fills slots `[from, to)` with boids that join the flock as it is now,
-   * rather than appearing wherever it started.
-   *
-   * Each newcomer is placed beside a boid already flying, with that boid's
-   * velocity turned slightly. Raising the count slider then thickens the flock
-   * you are watching instead of firing a clump in from the spawn disc.
+   * Fills slots `[from, to)`, placing each newcomer beside a boid already
+   * flying with that boid's velocity turned slightly. Raising the count slider
+   * then thickens the flock you are watching instead of firing a clump in from
+   * the spawn disc.
    */
   private spawnIntoFlock(from: number, to: number): void {
     const random = this.spawnRandom;
@@ -473,8 +455,8 @@ class Flock implements Simulation {
   }
 
   /**
-   * Refreshes the camera's sample: a fixed stride across the flock rather than
-   * a prefix, so it stays spread over the whole thing however the count moves.
+   * Refreshes the camera's sample. A fixed stride across the flock rather than
+   * a prefix, so it stays spread over the whole of it however the count moves.
    */
   private updateSample(): void {
     const sample = this.sampleState;
@@ -509,10 +491,9 @@ class Flock implements Simulation {
     sample.centroid.x = sumX / n;
     sample.centroid.y = sumY / n;
 
-    // The density band, off the same sampled boids. One pass, no allocation,
-    // and it rides along with a loop the camera already needs — scanning the
-    // whole flock for a statistic nobody reads per boid would be the wrong
-    // trade at five thousand.
+    // The density band, off the same sampled boids, riding along with a loop
+    // the camera already needs. Scanning the whole flock for a statistic
+    // nobody reads per boid would be the wrong trade at five thousand.
     const mean = sumDensity / n;
     const variance = Math.max(0, sumDensity2 / n - mean * mean);
     this.densityTarget = Math.max(1, mean + DENSITY_SIGMAS * Math.sqrt(variance));

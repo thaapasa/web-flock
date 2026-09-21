@@ -1,29 +1,26 @@
 #version 300 es
 
 /**
- * One instanced quad per boid, oriented along its velocity. The chevron itself
- * is found per pixel in the fragment shader, so this only has to deliver a
- * rectangle big enough to hold it, and the local coordinates to measure
- * against.
+ * One instanced quad per boid, turned along its velocity. The fragment shader
+ * finds the chevron per pixel, so this only delivers a rectangle big enough to
+ * hold it and the local coordinates to measure against.
  *
- * Everything local is in **device pixels**, with +x along the heading, which
- * is what lets the whole mark be specified in pixels and stay the same weight
- * at any zoom.
+ * Local coordinates are device pixels, +x along the heading.
  */
 
 layout(location = 0) in vec2 aPosition;
 layout(location = 1) in vec2 aVelocity;
 layout(location = 2) in float aDensity;
 
-/** World to clip for this viewport rect. Not the camera's own matrix: in
-    comparison mode each quadrant is a smaller viewport at the same scale. */
+/** World to clip for this viewport rect, built in boids.ts. In comparison mode
+    the rect is one quadrant rather than the whole window. */
 uniform mat3 uTransform;
 /** Clip units per device pixel, x and y. */
 uniform vec2 uPixelToClip;
 
 uniform float uLength;
 uniform float uHalfWidth;
-/** Slack around the mark so a stroke has room to fade out at the quad's edge. */
+/** Slack around the mark so a stroke can fade out inside the quad. */
 uniform float uPad;
 
 uniform int uColourMode;
@@ -53,9 +50,8 @@ void main() {
     : clamp((value - uRange.x) / max(uRange.y - uRange.x, 1e-6), 0.0, 1.0);
   vColour = mix(uLowColour, uHighColour, t);
 
-  // The boid's position goes through the matrix; its shape is added afterwards
-  // in pixels. Doing the shape in world units and scaling it would make the
-  // stroke width a function of zoom, which is exactly what it must not be.
+  // The position goes through the matrix, the shape is added after it in
+  // pixels. Shaping in world units and scaling would tie stroke width to zoom.
   vec3 clip = uTransform * vec3(aPosition, 1.0);
   gl_Position = vec4(clip.xy + offset * uPixelToClip, 0.0, 1.0);
 }

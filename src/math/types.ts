@@ -1,4 +1,4 @@
-/** A point or vector in world space. **+y points up**, as in mathematics. */
+/** A point or vector in world space, where +y points up. */
 export interface Vec2 {
   x: number;
   y: number;

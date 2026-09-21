@@ -25,8 +25,7 @@ describe('presets', () => {
   /**
    * The one that would fail silently. A style asking for more history than the
    * texture holds reads rows belonging to older samples, so the trail doubles
-   * back on itself — which looks like a bad trail rather than like a bug, and
-   * would be tuned around instead of fixed.
+   * back on itself, which looks like a bad trail rather than a bug.
    */
   it.each(PRESET_CASES)('never asks for more history than exists (%s)', (_name, style) => {
     expect(style.trailPoints).toBeGreaterThanOrEqual(1);
@@ -36,8 +35,8 @@ describe('presets', () => {
   it.each(PRESET_CASES)('describes a mark with a direction (%s)', (_name, style) => {
     expect(style.size).toBeGreaterThan(0);
     expect(style.minScreenSize).toBeGreaterThan(0);
-    // At or past a right angle the arms stop being a chevron and start being a
-    // line across the heading, which is the one thing the mark must never be.
+    // At or past a right angle the arms stop being a chevron and become a line
+    // across the heading, which says nothing about direction.
     expect(style.halfAngle).toBeGreaterThan(0);
     expect(style.halfAngle).toBeLessThan(Math.PI / 2);
     expect(style.lineWidth).toBeGreaterThan(0);
@@ -65,11 +64,8 @@ describe('mark length', () => {
     expect(markLength(style, 100)).toBe(500);
   });
 
-  /**
-   * The departure from a constant screen size: the same mark throughout,
-   * never LOD, but a floor so a flock seen from far away thins into a texture
-   * rather than disappearing.
-   */
+  /** The same mark throughout, never LOD, but with a floor so a distant flock
+   * thins into a texture rather than disappearing. */
   it('stops shrinking at the floor, however far out the camera goes', () => {
     const style = withStyle({ size: 5, minScreenSize: 3.5 });
     for (let logScale = -6; logScale <= 0; logScale += 0.25) {
@@ -82,8 +78,8 @@ describe('mark length', () => {
 describe('the size floor', () => {
   /**
    * The floor stops the mark shrinking, but the boids keep converging on
-   * screen. Without dimming what the floor holds up, zooming out is a way of
-   * making light, and additive blending piles it into a white blob.
+   * screen. Without dimming what the floor holds up, zooming out makes light,
+   * and additive blending piles it into a white blob.
    */
   it('leaves a mark alone while it is above the floor', () => {
     const style = withStyle({ size: 5, minScreenSize: 3.5, floorFade: 1 });
@@ -138,9 +134,9 @@ describe('colour ramp', () => {
   });
 
   /**
-   * The point of holding the range as fractions: the same style against a
-   * faster flock gives the same colours to the same *relative* speeds. Nothing
-   * has to be retuned when 7a moves the flock's speeds.
+   * The point of holding the range as fractions: against a faster flock the
+   * same style gives the same colours to the same relative speeds, so moving
+   * the flock's speeds retunes nothing here.
    */
   it('follows the band when the flock is retuned', () => {
     const style = withStyle({ colourBy: 'speed', speedRange: [0, 1] });

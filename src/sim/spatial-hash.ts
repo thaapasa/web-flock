@@ -1,32 +1,17 @@
 /**
- * A uniform spatial hash over an unbounded plane.
+ * A uniform spatial hash over an unbounded plane. Boids go into square cells
+ * the size of the query radius, so a query only looks at the 3x3 block of cells
+ * around itself.
  *
- * Neighbour search is the whole cost of flocking: every boid asks "who is near
- * me" once per step, 5,000 times at 120 Hz. Done naively that is quadratic and
- * hopeless, so boids are bucketed into square cells the size of the query
- * radius and each query only looks at the 3x3 block of cells around itself.
+ * The plane is unbounded, so cell coordinates cannot index an array and are
+ * hashed into a fixed table instead. Two distant cells can then share a bucket,
+ * so every entry carries its real cell coordinates and lookups check them.
+ * Without that check a lookup visits the same bucket twice and counts some
+ * neighbours twice, which quietly biases every average in the simulation.
  *
- * Three decisions worth stating, because all three are places this is usually
- * got wrong:
- *
- * - **The plane is unbounded**, so cell coordinates are unbounded integers and
- *   cannot index an array directly. They are hashed into a fixed table, which
- *   means two distant cells can share a bucket. Every entry therefore carries
- *   its real cell coordinates and lookups check them. Without that check a
- *   collision does not merely add far-away candidates that the distance test
- *   would reject — it makes a lookup visit the same bucket twice and count some
- *   neighbours twice, which silently biases every average in the simulation.
- *
- * - **Rebuilt from scratch every step**, by counting sort into flat typed
- *   arrays. No per-cell arrays, no `Map`, nothing allocated after
- *   construction. Incremental update would be faster in principle and is not
- *   worth the bookkeeping at this scale.
- *
- * - **The 3x3 walk is offered per cell, not only per boid.** Every boid in a
- *   cell has the same candidates, and there are on the order of ten boids to a
- *   cell, so walking the block once and reusing it is most of the difference
- *   between hitting 60fps and not. {@link gatherCellBlock} is the primitive;
- *   {@link queryNeighbours} is it plus a distance test.
+ * The index is rebuilt from scratch every step, by counting sort into flat
+ * typed arrays with nothing allocated after construction. Incremental update
+ * would be faster in principle and is not worth the bookkeeping at this scale.
  */
 
 function nextPowerOfTwo(value: number): number {
@@ -89,11 +74,9 @@ export class SpatialHash {
   }
 
   /**
-   * Largest number of entries in any one bucket after the last build.
-   *
-   * A perf canary. The predicted failure mode (step 8) is the flock compressing
-   * into a single cell, at which point every lookup degenerates to a scan of
-   * the whole flock; this is the number that says so before the framerate does.
+   * Largest number of entries in any one bucket after the last build. It shows
+   * the flock compressing into one cell, where every lookup degenerates into a
+   * scan of the whole flock, before the framerate does.
    */
   get maxBucketSize(): number {
     return this._maxBucketSize;
@@ -155,16 +138,17 @@ export class SpatialHash {
   }
 
   /**
-   * Collects every boid in the 3x3 block of cells centred on
-   * `(cellX, cellY)` into `out`, and returns how many there were.
+   * Collects every boid in the 3x3 block of cells centred on `(cellX, cellY)`
+   * into `out`, and returns how many there were.
    *
-   * This is the traversal — which cells, which entries, and the check that
-   * rejects a foreign cell sharing a bucket. Everything that searches the hash
-   * goes through it, so there is one place for that logic to be right.
+   * Everything that searches the hash goes through this, so the traversal and
+   * the check that rejects a foreign cell sharing a bucket live in one place.
+   * A block is offered per cell rather than per boid because every boid in a
+   * cell has the same candidates, and there are on the order of ten of them.
    *
-   * The result is a superset of any neighbourhood inside the cell: callers
-   * still apply their own distance test, and `out` includes the boids of the
-   * centre cell, so a caller looking for a boid's neighbours must skip itself.
+   * The result is a superset: a caller applies its own distance test, and `out`
+   * holds the centre cell too, so a caller looking for a boid's neighbours must
+   * skip that boid itself.
    */
   gatherCellBlock(cellX: number, cellY: number, out: Int32Array): number {
     const { cellStart, entries, entryCellX, entryCellY } = this;
@@ -194,11 +178,9 @@ export class SpatialHash {
    * `radius` must not exceed the `cellSize` the hash was built with, or the
    * block searched is too small and neighbours go missing.
    *
-   * This is what the tests compare against brute force. The simulation does not
-   * call it — it gathers a block once per cell and shares it across the boids
-   * in that cell — but the part that could plausibly be wrong, the traversal,
-   * is {@link gatherCellBlock} and is common to both. What is left here is a
-   * distance test, in plain sight.
+   * The tests compare this against brute force. The simulation gathers a block
+   * once per cell instead, but both share `gatherCellBlock`, which is the part
+   * that could plausibly be wrong. What is left here is a distance test.
    */
   queryNeighbours(positions: Float32Array, index: number, radius: number, out: Int32Array): number {
     const candidates = this.blockScratch;

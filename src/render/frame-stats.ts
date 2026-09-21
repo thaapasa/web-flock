@@ -1,29 +1,17 @@
-/**
- * Rolling frame timings, for the HUD.
- *
- * PLAN.md puts this in step 4b so that performance is visible the whole way
- * through rather than measured at the end. It arrives a step early because the
- * simulation turned out to get slower the longer it runs, and an unmeasured
- * frame rate is an argument rather than a fact.
- *
- * Both a mean and a worst case, because they answer different questions. The
- * mean says whether there is headroom; the worst frame in the last second is
- * the only thing that shows a hitch, which a mean over the same window hides
- * completely.
- */
+/** Rolling frame timings, for the HUD. */
 
 export interface FrameStats {
-  /** Frames per second, from the mean frame interval. */
+  /** From the mean frame interval, not from the last frame. */
   readonly fps: number;
   /** Mean milliseconds between frames. */
   readonly frameMs: number;
-  /** Slowest single frame in the window. A hitch shows up here and nowhere else. */
+  /** Slowest single frame in the window. The mean hides a hitch; this shows it. */
   readonly worstFrameMs: number;
-  /** Mean milliseconds of CPU spent inside `simulation.step`. */
+  /** Mean milliseconds of CPU inside `simulation.step`. */
   readonly simMs: number;
-  /** Simulation steps run on the last frame. */
+  /** Steps run on the last frame. */
   readonly steps: number;
-  /** True when the accumulator had to drop time to avoid spiralling. */
+  /** True when the frame loop dropped time to stop the steps spiralling. */
   readonly behind: boolean;
 }
 

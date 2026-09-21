@@ -36,9 +36,9 @@ function hashNeighbours(
 }
 
 /**
- * Compares every boid's neighbour set against brute force, and insists the
- * hash's answer contains no duplicates — a bucket collision that made a query
- * visit the same cell twice would still pass a set comparison.
+ * Compares every boid's neighbour set against brute force, and insists on no
+ * duplicates: a bucket collision that made a query visit the same cell twice
+ * would still pass a set comparison.
  */
 function expectMatchesBruteForce(
   positions: Float32Array,
@@ -80,9 +80,9 @@ describe('SpatialHash', () => {
   });
 
   it('agrees when the whole flock is compressed into one cell', () => {
-    // The step 8 failure mode: correctness must survive it even if speed does.
-    // Shifted clear of the axes: a clump straddling them would be split across
-    // four cells and would not be the case under test.
+    // The failure mode to watch for, and correctness has to survive it even if
+    // speed does not. Shifted clear of the axes, since a clump straddling them
+    // would split across four cells and would not be the case under test.
     const positions = scatter(250, 2, 11);
     for (let i = 0; i < positions.length; i++) positions[i] += 20;
     expectMatchesBruteForce(positions, 250, 50);

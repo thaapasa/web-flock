@@ -8,83 +8,43 @@ import { DEFAULT_OVERLAY_OPTIONS } from '../render/overlay';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 
-/**
- * Everything the user can change, in one object.
- *
- * `SimParams` is what the *simulation* takes; this is what the *panel* holds,
- * and the two are deliberately not the same shape. Two differences, each for a
- * reason:
- *
- * 1. **The cursor's direction is a mode, not a sign.** `SimParams` carries one
- *    signed `cursorStrength` because that is the cheap thing for the step to
- *    read. A panel that exposed it raw would make "off" a particular point in
- *    the middle of a slider, and "predator or attractor" something you infer
- *    from a minus sign. So the panel holds a mode and a magnitude, and
- *    {@link simParams} multiplies them back together. `nothing` is a mode
- *    rather than a zero, which is why it can also turn the ring off.
- *
- * 2. **The look is preset names plus overrides**, not a resolved style. Storing
- *    a whole `BoidStyle` would freeze a copy of whatever the preset said on the
- *    day it was saved, so 7b's retuning of the presets would never reach a
- *    browser that had a saved set — the one thing persistence must not do.
- *
- * Everything here is plain data and serialises to JSON without translation,
- * which is the same property `sim/params.ts` was designed for.
- */
-
 export type CursorMode = 'nothing' | 'predator' | 'attractor';
 
-/** In panel order: off, then the two directions. */
 export const CURSOR_MODES: readonly CursorMode[] = ['nothing', 'predator', 'attractor'];
 
-/** What the mode contributes to `SimParams.cursorStrength`. */
+/** What each mode contributes to the sign of `SimParams.cursorStrength`. */
 const CURSOR_SIGN: Record<CursorMode, number> = {
   nothing: 0,
   predator: -1,
   attractor: 1,
 };
 
-/** The flock's parameters minus the cursor's direction. See the file comment. */
 export type FlockSettings = Omit<SimParams, 'cursorStrength'>;
 
 export interface CursorSettings {
+  /**
+   * `nothing` is a mode rather than a zero strength, so putting the cursor down
+   * keeps the strength you set and hides the ring.
+   */
   mode: CursorMode;
-  /** Magnitude only, never negative: {@link CursorMode} supplies the sign. */
+  /** Magnitude only, never negative. The mode supplies the sign. */
   strength: number;
 }
 
 export interface CameraSettings {
-  /**
-   * Whether the camera tracks the flock. With it off the pointer drags the
-   * camera instead, and the flock is free to fly off screen.
-   *
-   * PLAN.md ruled out manual panning and any follow/override state machine.
-   * This is a departure from the first and not the second: nothing ever
-   * disengages follow behind your back, so there is no state to be surprised
-   * by — it is on until you turn it off. Watching the flock leave turned out to
-   * be worth having.
-   */
   follow: boolean;
-  /**
-   * Zoom, as log10 CSS pixels per world unit — the camera's own unit.
-   *
-   * A number the camera *holds*, not one derived from the flock. PLAN.md asks
-   * for a framing percentage recomputed from how far the flock spreads; that
-   * was built and taken out again because it hunted, and `camera/framing.ts`
-   * records why. Follow does not touch it, so toggling follow changes where the
-   * camera points and never how far out it is.
-   */
+  /** Zoom, as log10 CSS pixels per world unit. Follow never touches it. */
   logScale: number;
 }
 
 export interface LookSettings {
-  /** Name of a {@link BOID_PRESETS} entry. Not a copy of one — see the file comment. */
+  /** Name of a `BOID_PRESETS` entry. */
   boid: string;
   trails: boolean;
   blend: BlendMode;
   floorFade: number;
 
-  /** Name of a {@link GRID_PRESETS} entry. */
+  /** Name of a `GRID_PRESETS` entry. */
   grid: string;
   labels: LabelPlacement;
   labelFormat: LabelFormat;
@@ -97,14 +57,7 @@ export interface Settings {
   look: LookSettings;
 }
 
-/**
- * A fresh, mutable set at the values the rest of the project calls default.
- *
- * Nothing is spelled out twice: the flock comes from `DEFAULT_SIM_PARAMS`, the
- * look from the first preset in each list, the labels from the overlay's own
- * defaults. A default that disagreed with the module that owns it would be a
- * silent way for 7a's tuning to stop reaching the app.
- */
+/** Every default is read from the module that owns it, never spelled out here. */
 export function defaultSettings(): Settings {
   const { cursorStrength, ...flock } = DEFAULT_SIM_PARAMS;
   return {
@@ -126,7 +79,6 @@ export function defaultSettings(): Settings {
   };
 }
 
-/** What the simulation takes. The cursor's mode and magnitude recombine here. */
 export function simParams(settings: Settings): SimParams {
   return {
     ...settings.flock,
@@ -134,7 +86,7 @@ export function simParams(settings: Settings): SimParams {
   };
 }
 
-/** World radius the cursor force reaches, or 0 when it is doing nothing. */
+/** How far the cursor force reaches, in world units, or 0 when it is off. */
 export function cursorRadius(settings: Settings): number {
   if (settings.cursor.mode === 'nothing' || settings.cursor.strength <= 0) return 0;
   return Math.max(0, settings.flock.cursorRadius);
@@ -149,12 +101,11 @@ export function findPreset<T extends { readonly name: string }>(
 }
 
 /**
- * The overrides the panel puts on top of whichever boid preset is selected.
+ * Boid presets with the panel's overrides on them, cached.
  *
- * Cached by what it produces rather than rebuilt per frame: `boids.draw` reads
- * a style into scalars and keeps nothing, so a fresh object every frame would
- * be correct but would be garbage nobody asked for. The same few combinations
- * recur forever, so the map stays tiny.
+ * `boids.draw` reads a style into scalars and keeps nothing, so building one
+ * per frame would work and would be garbage nobody asked for. The same few
+ * combinations recur, so the map stays tiny.
  */
 const boidVariants = new Map<string, Readonly<BoidStyle>>();
 
@@ -178,20 +129,17 @@ export function applyLook(base: Readonly<BoidStyle>, look: LookSettings): Readon
   return variant;
 }
 
-/** The boid style to draw an ordinary frame with. */
 export function boidStyle(look: LookSettings): Readonly<BoidStyle> {
   return applyLook(findPreset(BOID_PRESETS, look.boid, DEFAULT_BOID_STYLE), look);
 }
 
-/** The grid style to draw an ordinary frame with. */
 export function gridStyle(look: LookSettings): Readonly<GridStyle> {
   return findPreset(GRID_PRESETS, look.grid, DEFAULT_GRID_STYLE);
 }
 
 /**
- * Bumped when a stored set can no longer be read. Anything older is discarded
- * rather than guessed at — a set is a few seconds of sliding to recreate, and a
- * half-migrated one would be a slow lie rather than a fast loss.
+ * Bump this when a stored set can no longer be read. Anything older is thrown
+ * away rather than migrated: a set takes seconds to slide back.
  */
 const STORAGE_VERSION = 1;
 
@@ -200,15 +148,9 @@ export function serialise(settings: Settings): string {
 }
 
 /**
- * A stored set, merged over the defaults; the defaults alone if there is
- * nothing usable.
+ * A stored set merged over the defaults, or the defaults alone.
  *
- * Every field is validated on the way in rather than trusted. The blob comes
- * from a browser store the user can edit, from an older build of this app, or
- * from a newer one that has been rolled back — so a `NaN` speed or a preset
- * name that no longer exists is an ordinary case, not an attack. Anything that
- * does not survive validation falls back to its default individually, so one
- * bad field does not cost the whole set.
+ * Each field falls back on its own, so one bad value does not cost the set.
  */
 export function parse(text: string | null): Settings {
   const settings = defaultSettings();
@@ -245,8 +187,6 @@ export function parse(text: string | null): Settings {
 
   const look = from.look;
   if (isRecord(look)) {
-    // By name, and only a name that still exists: a preset renamed in 7b must
-    // fall back to the default rather than leave the panel pointing at nothing.
     settings.look.boid = oneOf(
       look.boid,
       BOID_PRESETS.map((preset) => preset.name),
@@ -272,13 +212,8 @@ export function parse(text: string | null): Settings {
 }
 
 /**
- * Replaces every value in `target` with `source`'s, in place.
- *
- * In place because the panel binds to the objects *inside* a {@link Settings}
- * and holds those references for as long as it lives. Handing it a freshly
- * built set would leave every control pointing at the set the app used to have,
- * which is the shape a reset button most wants to take and the one that would
- * quietly stop working.
+ * Writes through the objects inside `target` rather than replacing them. The
+ * panel binds to those objects and holds them for as long as it lives.
  */
 export function copyInto(target: Settings, source: Settings): void {
   Object.assign(target.flock, source.flock);
@@ -288,17 +223,10 @@ export function copyInto(target: Settings, source: Settings): void {
 }
 
 /**
- * The set as a `SimParams` literal, ready to paste into `sim/params.ts` or into
- * a chat.
+ * The set as a `SimParams` literal, ready to paste into `sim/params.ts`.
  *
- * PLAN.md asks for this so that "this one felt good" can become something
- * concrete in 7a. A string rather than an object for the same reason
- * `dev/readings.ts` prints one: a console renders an object as an interactive
- * tree that copies back as something nobody can read.
- *
- * The key order comes from `DEFAULT_SIM_PARAMS` itself, so the export reads
- * like the file it is destined for and cannot drift out of date when a
- * parameter is added.
+ * A string rather than an object, because a console prints an object as a tree
+ * that copies back as something nobody can read.
  */
 export function exportLiteral(settings: Settings): string {
   const params = simParams(settings);
@@ -318,12 +246,9 @@ export function exportLiteral(settings: Settings): string {
 }
 
 /**
- * Six significant figures, with no trailing zeros.
- *
- * Exact enough to reproduce a look and short enough to read. Values like
- * `fieldOfView` are written as fractions of pi in `sim/params.ts` and come out
- * here as `2.0944`, which is the honest thing to hand back — it is the number
- * the simulation was actually running.
+ * Six significant figures, with no trailing zeros. An angle that `sim/params.ts`
+ * writes as a fraction of pi comes out as `2.0944`, which is what the
+ * simulation was running.
  */
 function short(value: number): string {
   return String(Number(value.toPrecision(6)));
@@ -333,7 +258,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Copies every finite number the target already has a key for, and nothing else. */
+/** Copies finite numbers for the keys `into` already has, and nothing else. */
 function mergeNumbers<T extends Record<string, number>>(into: T, from: unknown): void {
   if (!isRecord(from)) return;
   for (const key of Object.keys(into)) {
