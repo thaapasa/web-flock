@@ -199,7 +199,7 @@ export function parse(text: string | null): Settings {
     );
     settings.look.trails = bool(look.trails, settings.look.trails);
     settings.look.blend = oneOf(look.blend, ['additive', 'alpha'] as const, settings.look.blend);
-    settings.look.floorFade = clamp(num(look.floorFade, settings.look.floorFade), 0, 4);
+    settings.look.floorFade = clamp(num(look.floorFade, settings.look.floorFade), 0, 2);
     settings.look.labels = oneOf(look.labels, ['edge', 'axis'] as const, settings.look.labels);
     settings.look.labelFormat = oneOf(
       look.labelFormat,

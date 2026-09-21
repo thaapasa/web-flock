@@ -55,9 +55,16 @@ The grid is one fullscreen shader pass with no geometry: lines are found per pix
 of spacing currently visible, and each decade fades in and out as you zoom. That is what makes the
 plane unbounded, since there is nothing to run out of however far the flock travels.
 
+The shader works in device pixels and never sees a world coordinate. Float32 runs out of mantissa
+once the flock has migrated far from the origin, and the lines start to shimmer. The CPU reduces the
+world position to a small pixel offset in float64 before the upload.
+
 The boids are two instanced draws, the trail ribbons and then the chevrons over them. Trail history
 is a texture of recent samples, one column per boid. Samples are captured on simulation steps rather
 than on frames, so a trail is a length of time rather than a length of framerate.
+
+Both boid shaders emit premultiplied colour, so the source blend factor is `ONE` whichever mode is
+set and only the destination factor tells additive from alpha. One shader serves both.
 
 Colour ramps span the ranges the simulation reports rather than fixed values, so retuning the flock
 cannot leave a style pointing at a range no boid reaches. Everything else adjustable about the look
