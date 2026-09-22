@@ -15,7 +15,7 @@ Where the code is:
 - `src/render`: the GL wrapper, the grid, the boids, the text layer, and the shaders.
 - `src/camera`: the world/screen transform and the controls that move it.
 - `src/ui`: the settings, the panel bound to them, and persistence.
-- `src/dev`: temporary tools for choosing presets by eye and logging frame times.
+- `src/dev`: a temporary frame-time log.
 - `src/app.ts`: wires it all together and runs the frame loop. Start reading there.
 
 ## The frame loop
@@ -96,6 +96,12 @@ only place that turns it into simulation parameters, styles and a camera.
 Sets are saved in `localStorage` and validated on the way back in, because the stored text can come
 from an older build or from a user who edited it. The look is saved as preset names plus overrides
 rather than as a finished style, so retuning a preset still reaches saved sets.
+
+How the flock flies is a named preset too, in `sim/presets.ts`. It carries the rules and nothing
+else, so picking one leaves the count, the spawn disc and the cursor as they were. This one is saved
+as values rather than as a name, because a slider moves the set off the preset and that has to
+survive a reload. The name in the readout comes from comparing the values, so a slider that lands
+back on a preset's value picks that name up again.
 
 ## Tests
 

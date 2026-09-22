@@ -1,11 +1,11 @@
-/**
- * Everything the user can change about the flock's behaviour. Every field takes
- * effect on the next step, with no restart.
- */
-export interface SimParams {
-  /** How many boids are simulated. Never exceeds the backend's capacity. */
-  count: number;
+import { DEFAULT_FLOCK_PRESET, flockBehaviour } from './presets';
 
+/**
+ * How the flock flies, which is everything a named preset in `presets.ts`
+ * carries. What `SimParams` adds around it is the user's own: how many boids
+ * there are, where they start, and what the cursor does to them.
+ */
+export interface FlockBehaviour {
   /**
    * Boids closer than this push each other apart. World units.
    *
@@ -52,6 +52,15 @@ export interface SimParams {
   wanderStrength: number;
   /** How fast a boid's wander direction drifts, in radians per second. */
   wanderRate: number;
+}
+
+/**
+ * Everything the user can change about the flock. Every field takes effect on
+ * the next step, with no restart.
+ */
+export interface SimParams extends FlockBehaviour {
+  /** How many boids are simulated. Never exceeds the backend's capacity. */
+  count: number;
 
   /** Cursor force: positive attracts, negative repels. */
   cursorStrength: number;
@@ -62,27 +71,11 @@ export interface SimParams {
   spawnRadius: number;
 }
 
-/** A starting point, not an answer. The real values come from watching it fly. */
+/** The first preset, with the fields no preset carries around it. */
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
 
-  separationRadius: 12,
-  neighbourRadius: 24,
-  fieldOfView: (Math.PI * 2) / 3,
-
-  separationWeight: 1.5,
-  alignmentWeight: 1,
-  cohesionWeight: 0.8,
-  maxForce: 120,
-
-  originPull: 0.02,
-
-  minSpeed: 20,
-  maxSpeed: 60,
-  maxTurnRate: Math.PI * 1.5,
-
-  wanderStrength: 8,
-  wanderRate: 2,
+  ...flockBehaviour(DEFAULT_FLOCK_PRESET),
 
   cursorStrength: -500,
   cursorRadius: 90,

@@ -88,8 +88,7 @@ function preset(overrides: Partial<GridStyle> & { name: string }): Readonly<Grid
   } satisfies GridStyle);
 }
 
-/** Bound to the number keys, and the pool comparison mode draws from. Each
- * preset after the first changes one thing. */
+/** Picked from the panel. Each preset after the first changes one thing. */
 export const GRID_PRESETS: readonly Readonly<GridStyle>[] = Object.freeze([
   preset({ name: 'open', minPixelSpacing: 24 }),
 

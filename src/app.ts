@@ -2,14 +2,12 @@ import { Camera } from './camera/camera';
 import type { CameraControl } from './camera/camera-control';
 import { createCameraControl } from './camera/camera-control';
 import { createReadingLog, describeRenderer } from './dev/readings';
-import { createStyleKeys } from './dev/style-keys';
 import type { Vec2 } from './math/types';
 import type { BoidFeed } from './render/boid-feed';
 import { createUploadFeed } from './render/boid-feed';
 import { createBoidRenderer } from './render/boids';
 import { createResizingCanvas } from './render/canvas';
 import { createFrameStats } from './render/frame-stats';
-import type { ViewportRect } from './render/gl';
 import { getContext } from './render/gl';
 import type { CursorRing } from './render/grid';
 import { createGridRenderer } from './render/grid';
@@ -18,6 +16,7 @@ import { createOverlay, DEFAULT_OVERLAY_OPTIONS } from './render/overlay';
 import { createUploadTrailHistory } from './render/trail-history';
 import { createFlock } from './sim/flock';
 import type { SimInput, Simulation } from './sim/simulation';
+import { createAppKeys } from './ui/keys';
 import type { Panel } from './ui/panel';
 import { createPanel } from './ui/panel';
 import type { Settings } from './ui/settings';
@@ -27,6 +26,7 @@ import {
   cursorRadius,
   defaultSettings,
   exportLiteral,
+  flockPresetName,
   gridStyle,
   parse,
   serialise,
@@ -197,7 +197,7 @@ export function createApp(
   // The camera refreshes the panel and the panel asks the camera to frame the
   // flock, so one of them has to be declared before the other is built. Both
   // stand down while a Tweakpane field has the keyboard, because every global
-  // key here is a bare letter.
+  // key here is unmodified.
   let panel: Panel | null = null;
   const panelHasKeys = (): boolean => panel?.capturesKeys === true;
 
@@ -238,11 +238,15 @@ export function createApp(
     },
   });
 
-  const styleKeys = createStyleKeys(
+  const keys = createAppKeys(
     settings,
     {
+      // After the refresh, because the panel puts the set back as it was and
+      // the simulation has to be given that set, not the rounded one the
+      // refresh briefly leaves behind.
       changed: () => {
         panel?.refresh();
+        apply();
         scheduleSave();
       },
       dumpReadings,
@@ -282,8 +286,6 @@ export function createApp(
 
   gl.clearColor(0, 0, 0, 1);
 
-  /** Reused each frame, so the loop allocates nothing. */
-  const rect: ViewportRect = { x: 0, y: 0, width: 1, height: 1 };
   /** Reused each frame. The renderer sees these fields as readonly; we do not. */
   const ring: { x: number; y: number; radius: number } = { x: 0, y: 0, radius: 0 };
 
@@ -337,7 +339,6 @@ export function createApp(
     // After the last step and before any draw; see BoidFeed.sync.
     feed.sync();
 
-    const { deviceWidth, deviceHeight, pixelRatio } = surface.size;
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const gridLook = gridStyle(settings.look);
@@ -352,56 +353,18 @@ export function createApp(
       cursorRing = ring;
     }
 
-    // At most one is ever set: the digits drive one preset list at a time, and
-    // `b` says which.
-    const gridPanes = styleKeys.gridQuadrants;
-    const boidPanes = styleKeys.boidQuadrants;
-    const panes = gridPanes ?? boidPanes;
-
-    if (panes) {
-      // Four variants of the same view in one frame. Every quadrant uses the
-      // same camera and the same scale, so only the style differs.
-      const splitX = Math.floor(deviceWidth / 2);
-      const splitY = Math.floor(deviceHeight / 2);
-      const columns = [0, splitX];
-      const widths = [splitX, deviceWidth - splitX];
-      // Reading order, so quadrant 1 is top-left; GL's y runs the other way.
-      const rows = [splitY, 0];
-      const heights = [deviceHeight - splitY, splitY];
-      for (let i = 0; i < panes.length; i++) {
-        rect.x = columns[i % 2];
-        rect.y = rows[Math.floor(i / 2)];
-        rect.width = widths[i % 2];
-        rect.height = heights[Math.floor(i / 2)];
-        // The grid is opaque over its rect, so it has to be drawn per pane and
-        // before that pane's boids.
-        grid.draw(camera, pixelRatio, gridPanes?.[i].style ?? gridLook, rect, cursorRing);
-        boids.draw(target, camera, pixelRatio, boidPanes?.[i].style ?? boidLook, rect);
-      }
-    } else {
-      rect.x = 0;
-      rect.y = 0;
-      rect.width = deviceWidth;
-      rect.height = deviceHeight;
-      grid.draw(camera, pixelRatio, gridLook, rect, cursorRing);
-      boids.draw(target, camera, pixelRatio, boidLook, rect);
-    }
-    // The pane loop leaves the viewport on the last quadrant; restore the full
-    // one before the next frame.
-    gl.viewport(0, 0, deviceWidth, deviceHeight);
+    grid.draw(camera, surface.size, gridLook, cursorRing);
+    boids.draw(target, camera, surface.size, boidLook);
 
     overlay.draw({
       camera,
       cursor: cursorOverCanvas ? cursor : null,
       cursorMode: pushing ? settings.cursor.mode : '',
       follow: settings.camera.follow,
-      style: gridPanes ? gridPanes[0].style : gridLook,
-      boid: {
-        styleName: (boidPanes ? boidPanes[0].style : boidLook).name,
-        count: feed.count,
-      },
-      quadrants: panes ? panes.map((pane) => pane.caption) : null,
-      help: `${cameraControl.help} · ${styleKeys.help}`,
+      style: gridLook,
+      boid: { styleName: boidLook.name, count: feed.count },
+      flock: flockPresetName(settings.flock),
+      help: `${cameraControl.help} · ${keys.help}`,
       stats: stats.current,
     });
 
@@ -443,7 +406,7 @@ export function createApp(
       sceneElement.removeEventListener('pointermove', onPointerMove);
       sceneElement.removeEventListener('pointerleave', onPointerLeave);
       stopWatchingSize();
-      styleKeys.dispose();
+      keys.dispose();
       panel?.dispose();
       cameraControl.dispose();
       overlay.dispose();

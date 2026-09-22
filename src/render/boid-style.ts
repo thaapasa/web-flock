@@ -161,8 +161,8 @@ function preset(
   } satisfies BoidStyle);
 }
 
-/** Bound to the number keys, and the pool comparison mode draws from. Each
- * preset after the first changes one thing. */
+/** Bound to shift and a number key. Each preset after the first changes one
+ * thing. */
 export const BOID_PRESETS: readonly Readonly<BoidStyle>[] = Object.freeze([
   preset({ name: 'signal', ramp: 'signal' }),
 

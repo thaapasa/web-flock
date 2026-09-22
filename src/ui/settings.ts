@@ -14,6 +14,8 @@ import type { LabelFormat, LabelPlacement } from '../render/overlay';
 import { DEFAULT_OVERLAY_OPTIONS, formatFramePercent } from '../render/overlay';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
+import type { FlockPreset } from '../sim/presets';
+import { FLOCK_BEHAVIOUR_KEYS, FLOCK_PRESETS, flockBehaviour } from '../sim/presets';
 
 export type CursorMode = 'nothing' | 'predator' | 'attractor';
 
@@ -108,6 +110,25 @@ export function simParams(settings: Settings): SimParams {
 export function cursorRadius(settings: Settings): number {
   if (settings.cursor.mode === 'nothing' || settings.cursor.strength <= 0) return 0;
   return Math.max(0, settings.flock.cursorRadius);
+}
+
+/** Writes a preset's rules over the set, leaving everything else alone. */
+export function applyFlockPreset(flock: FlockSettings, preset: FlockPreset): void {
+  Object.assign(flock, flockBehaviour(preset));
+}
+
+/**
+ * Which preset the set is on, or `custom` once a slider has moved.
+ *
+ * It compares the values rather than remembering a name, so a stored set comes
+ * back named, and a slider that lands back on a preset's value picks that name
+ * up again.
+ */
+export function flockPresetName(flock: FlockSettings): string {
+  const match = FLOCK_PRESETS.find((preset) =>
+    FLOCK_BEHAVIOUR_KEYS.every((key) => flock[key] === preset[key]),
+  );
+  return match?.name ?? 'custom';
 }
 
 export function findPreset<T extends { readonly name: string }>(
@@ -238,6 +259,16 @@ export function parse(text: string | null): Settings {
   }
 
   return settings;
+}
+
+/** A set that shares nothing with the one it was taken from. */
+export function cloneSettings(settings: Settings): Settings {
+  return {
+    flock: { ...settings.flock },
+    cursor: { ...settings.cursor },
+    camera: { ...settings.camera },
+    look: { ...settings.look },
+  };
 }
 
 /**

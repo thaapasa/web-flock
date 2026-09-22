@@ -4,13 +4,17 @@ import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
 import { BOID_PRESETS } from '../render/boid-style';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
+import { FLOCK_PRESETS } from '../sim/presets';
 import type { Settings } from './settings';
 import {
+  applyFlockPreset,
   boidStyle,
+  cloneSettings,
   copyInto,
   cursorRadius,
   defaultSettings,
   exportLiteral,
+  flockPresetName,
   parse,
   serialise,
   simParams,
@@ -212,5 +216,57 @@ describe('exportLiteral', () => {
       // back rounded rather than exact.
       expect(parsed[key]).toBeCloseTo(DEFAULT_SIM_PARAMS[key], 4);
     }
+  });
+});
+
+describe('flock presets', () => {
+  const other = FLOCK_PRESETS[FLOCK_PRESETS.length - 1];
+
+  it('names the set a preset was just applied to', () => {
+    const settings = defaultSettings();
+    applyFlockPreset(settings.flock, other);
+    expect(flockPresetName(settings.flock)).toBe(other.name);
+  });
+
+  it('leaves the fields no preset carries alone', () => {
+    const settings = defaultSettings();
+    settings.flock.count = 1234;
+    settings.flock.spawnRadius = 77;
+    applyFlockPreset(settings.flock, other);
+
+    expect(settings.flock.count).toBe(1234);
+    expect(settings.flock.spawnRadius).toBe(77);
+  });
+
+  it('calls a set that matches no preset custom', () => {
+    const settings = defaultSettings();
+    settings.flock.cohesionWeight += 0.01;
+    expect(flockPresetName(settings.flock)).toBe('custom');
+  });
+
+  it('starts on the first preset', () => {
+    expect(flockPresetName(defaultSettings().flock)).toBe(FLOCK_PRESETS[0].name);
+  });
+});
+
+describe('cloneSettings', () => {
+  it('shares no object with the set it copied', () => {
+    const settings = defaultSettings();
+    const copy = cloneSettings(settings);
+    copy.flock.count = 42;
+    copy.look.boid = 'ember';
+
+    expect(settings.flock.count).toBe(DEFAULT_SIM_PARAMS.count);
+    expect(settings.look.boid).not.toBe('ember');
+  });
+
+  it('survives a round trip through copyInto', () => {
+    const settings = defaultSettings();
+    const before = cloneSettings(settings);
+    settings.flock.fieldOfView = 2.09;
+    copyInto(settings, before);
+
+    expect(settings.flock.fieldOfView).toBe(DEFAULT_SIM_PARAMS.fieldOfView);
+    expect(flockPresetName(settings.flock)).toBe(FLOCK_PRESETS[0].name);
   });
 });

@@ -65,8 +65,8 @@ crash, it only makes the flock mushy, so we would have spent 7a tuning around it
 
 The adaptive axis grid, its tick labels and the coordinate readout.
 
-Comparison mode was built here, and it earns its place again in every step that is settled by eye:
-four variants of the same view in one frame, one look to choose from.
+Comparison mode was built here, and it settled the taste calls in this step and in 4a: four variants
+of the same view in one frame, one look to choose from. Step 7a says why it did not last.
 
 The taste calls are settled, and every option that lost is still reachable from a preset, because 7b
 looks at all of them again against the finished renderer.
@@ -120,17 +120,31 @@ nothing else.
 Follow owns the zoom now, so the panel carries two zoom controls and shows whichever one is live.
 Its two tuning knobs are still there, and 7b decides whether they stay.
 
-### 7a. Behaviour tuning (Collaborate)
+### 7a. Behaviour tuning (Collaborate, done)
 
-Find parameter values that genuinely flock. This is the first success criterion and pure judgement,
-so Claude cannot evaluate it.
+Eight named sets in `sim/presets.ts` on the number keys, and the slider ranges pulled in around what
+they use.
 
-The pattern is that Claude prepares candidates, the user picks a direction, and we repeat. Not the
-user alone with sliders, and not Claude guessing blind. Seeded starts, saved sets and comparison
-mode are already there to make that cheap.
+The answer came out as a list rather than as one set of values, and the first of the list is what a
+stranger gets.
 
-Slider ranges get revised here, once there is something to tune against. A range that is mostly dead
-zone makes the simulation feel broken when it is not.
+The four-pane comparison mode went here, along with the grid presets' keys. Four styles in one frame
+were worth the code. Four simulations would not be: what tells two sets apart is how they move over
+a minute. The digits were better spent on the flock, and the palettes moved to shift.
+
+Two things the tuning could not fix. They are where iteration two would start.
+
+**A linear origin pull gathers everything into one ring.** A boid circling under the pull settles at
+a radius of `v/√k`, and turns at `√k` whatever its speed, so every sub-flock shares an angular rate
+and they phase-lock. The sets that stay interesting either fly fast enough to bend past it, or pull
+weakly enough that the lap takes minutes. A pull of constant magnitude beyond a radius would break
+the lock, because the rate would then depend on speed.
+
+**Separation saturates, so a clump that forms stays.** The summed `1/d` vector is normalised before
+it steers, so it pushes no harder as the flock crowds, and it shares the force cap with cohesion.
+Deep inside a clump the terms cancel as well. The neighbour search costs the square of the density,
+so a flock that crowds is also a flock that lags. Every preset keeps the separation radius near half
+the neighbour radius, which avoids the problem rather than fixing it.
 
 ### 7b. Visual polish (Collaborate)
 
@@ -150,17 +164,17 @@ against what the project turned out to be.
 
 ## Sequencing
 
-Steps 1 to 6 are done. Step 7a is next. Steps 7b and 8 come last, because both judge the finished
-thing.
+Steps 1 to 7a are done. Step 7b is next, and step 8 after it, because both judge the finished thing.
 
 ## Out of scope for iteration one
 
 Obstacles, painted force fields, GPU simulation, deployment, and zoom-dependent LOD for the boid
-mark.
+mark. Also the two fixes step 7a describes, a sub-linear origin pull and a separation force that
+grows with crowding.
 
 ## Open questions
 
 - ~~Tick label format and placement~~, decided in step 3
 - ~~Trail construction, chevron proportions, colour~~, decided in step 4a
-- Slider ranges, to be decided in step 7a
+- ~~Slider ranges~~, decided in step 7a
 - Whether Tweakpane gets replaced, to be decided in step 7b

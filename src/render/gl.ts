@@ -117,14 +117,6 @@ export function createBuffer(
   return buffer;
 }
 
-/** A rectangle of the drawing buffer, in device pixels, y from the bottom. */
-export interface ViewportRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /** One vertex attribute's slot in a VAO. */
 export interface AttributeSpec {
   /** `layout(location = N)` in the vertex shader. */

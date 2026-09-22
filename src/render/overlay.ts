@@ -5,8 +5,8 @@ import type { FrameStats } from './frame-stats';
 import type { GridStyle } from './grid-style';
 
 /**
- * The text layer: tick labels, the coordinate readout, and comparison mode's
- * captions, drawn with the 2D context on a second canvas over the WebGL one.
+ * The text layer: tick labels and the readouts, drawn with the 2D context on a
+ * second canvas over the WebGL one.
  *
  * The overlay takes no pointer events (`pointer-events: none` in the page), so
  * the canvas underneath keeps receiving them.
@@ -58,11 +58,8 @@ export interface OverlayFrame {
   style: Readonly<GridStyle>;
   /** Null when nothing is drawing boids, which hides the line. */
   boid: BoidReadout | null;
-  /**
-   * Comparison mode: the four captions in reading order, top-left first. Null
-   * on an ordinary frame, which is the frame that draws tick labels.
-   */
-  quadrants: readonly string[] | null;
+  /** Which flock preset the rules are on. Empty hides the line. */
+  flock: string;
   /** One dim line of key bindings along the bottom. Empty hides it. */
   help: string;
   /** The frame-time HUD, top right. Null hides it. */
@@ -79,7 +76,6 @@ export interface Overlay {
 const LABEL_COLOUR = '212, 238, 255';
 const READOUT_COLOUR = 'rgba(150, 205, 235, 0.9)';
 const HELP_COLOUR = 'rgba(120, 165, 190, 0.55)';
-const SEPARATOR_COLOUR = 'rgba(190, 225, 245, 0.22)';
 const HALO = 'rgba(0, 0, 0, 0.8)';
 
 // A 60 fps frame is 16.7 ms. The first threshold sits just above it so that
@@ -177,6 +173,7 @@ export function createOverlay(
       `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
       `style   ${frame.style.name}`,
       ...(frame.boid ? [`boid    ${frame.boid.styleName}`] : []),
+      ...(frame.flock ? [`flock   ${frame.flock}`] : []),
     ];
 
     ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
@@ -192,35 +189,6 @@ export function createOverlay(
       ctx.strokeText(line, right, y);
       ctx.fillText(line, right, y);
       y += lineHeight;
-    }
-  };
-
-  const drawQuadrants = (frame: OverlayFrame, captions: readonly string[]): void => {
-    const width = frame.camera.viewportWidth;
-    const height = frame.camera.viewportHeight;
-    const halfWidth = width / 2;
-    const halfHeight = height / 2;
-
-    ctx.strokeStyle = SEPARATOR_COLOUR;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(halfWidth, 0);
-    ctx.lineTo(halfWidth, height);
-    ctx.moveTo(0, halfHeight);
-    ctx.lineTo(width, halfHeight);
-    ctx.stroke();
-
-    ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    const corners = [
-      { x: MARGIN, y: MARGIN },
-      { x: halfWidth + MARGIN, y: MARGIN },
-      { x: MARGIN, y: halfHeight + MARGIN },
-      { x: halfWidth + MARGIN, y: halfHeight + MARGIN },
-    ];
-    for (let i = 0; i < corners.length && i < captions.length; i++) {
-      label(captions[i], corners[i].x, corners[i].y, 0.95);
     }
   };
 
@@ -260,13 +228,7 @@ export function createOverlay(
       ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
-      if (frame.quadrants) {
-        // Four sets of tick labels would compete for the same few hundred
-        // pixels, and the variants differ in the lines, not the labels.
-        drawQuadrants(frame, frame.quadrants);
-      } else {
-        drawTicks(frame);
-      }
+      drawTicks(frame);
 
       drawReadout(frame);
       if (frame.stats) drawStats(frame, frame.stats);

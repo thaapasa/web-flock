@@ -1,5 +1,5 @@
 import type { Camera } from '../camera/camera';
-import type { ViewportRect } from './gl';
+import type { CanvasSize } from './canvas';
 import { createProgram, createVertexArray, draw, getUniformLocations, withDefines } from './gl';
 import fragmentSource from './grid.frag?raw';
 import vertexSource from './grid.vert?raw';
@@ -55,15 +55,11 @@ export interface CursorRing {
 }
 
 export interface GridRenderer {
-  /**
-   * Draws the grid over `rect`, which is left as the current GL viewport.
-   * Opaque, and covers every pixel of the rect, so it needs no clear under it.
-   */
+  /** Opaque over the whole drawing buffer, so it needs no clear under it. */
   draw(
     camera: Camera,
-    pixelRatio: number,
+    size: CanvasSize,
     style: Readonly<GridStyle>,
-    rect: ViewportRect,
     cursor: CursorRing | null,
   ): void;
   /** The decades drawn by the last call, finest first. */
@@ -97,7 +93,8 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       return liveBands;
     },
 
-    draw(camera, pixelRatio, style, rect, cursor): void {
+    draw(camera, size, style, cursor): void {
+      const { pixelRatio } = size;
       // Band selection works in CSS pixels, the unit the style is written in.
       // Only the upload converts to device pixels.
       liveBands = computeBands(camera.scale, style, bands);
@@ -111,10 +108,9 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
         weight[i] = band.weight;
       }
 
-      gl.viewport(rect.x, rect.y, rect.width, rect.height);
       gl.useProgram(program);
 
-      gl.uniform2f(uniforms.uCentre, rect.x + rect.width / 2, rect.y + rect.height / 2);
+      gl.uniform2f(uniforms.uCentre, size.deviceWidth / 2, size.deviceHeight / 2);
       gl.uniform1i(uniforms.uBands, liveBands);
       gl.uniform1fv(uniforms['uSpacing[0]'], spacing);
       gl.uniform2fv(uniforms['uPhase[0]'], phase);

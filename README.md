@@ -41,9 +41,11 @@ zoom is a plain scale you set yourself.
 Wheel zooms. Drag pans, while follow is off. `z` frames the flock, and `+` and `-` zoom a small step
 at a time.
 
-Development keys, which go away with `src/dev/`: `1`-`9` pick a preset, `c` shows four presets at
-once with `[` and `]` sliding through the list, `b` points the digits at the grid presets or the
-boid ones, `p` records a frame-time reading and prints the log, and `P` clears it.
+A number key picks how the flock flies, from the sets in `sim/presets.ts`. Shift and a number key
+picks the palette. The readout names the one you are on, and says `custom` once you move a slider.
+
+`p` records a frame-time reading and prints the log, and `P` clears it. Both go away with
+`src/dev/`.
 
 ## Related documentation
 

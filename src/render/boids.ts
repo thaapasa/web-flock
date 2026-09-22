@@ -13,7 +13,8 @@ import {
   TRAIL_COLOUR_CODES,
   trailSamples,
 } from './boid-style';
-import type { AttributeSpec, ViewportRect } from './gl';
+import type { CanvasSize } from './canvas';
+import type { AttributeSpec } from './gl';
 import { createProgram, createVertexArray, drawInstanced, getUniformLocations } from './gl';
 import trailFragmentSource from './trail.frag?raw';
 import trailVertexSource from './trail.vert?raw';
@@ -23,12 +24,6 @@ import type { TrailHistory } from './trail-history';
  * The ribbon and the chevron over it both take their shape in device pixels
  * around a position the matrix places, so stroke weight and trail width do not
  * change with zoom.
- *
- * The transform is built here from the viewport rect rather than taken from the
- * camera. Comparison mode draws one camera into four quadrants, and a quadrant
- * is a smaller viewport at the same scale; a camera matrix scaled by the whole
- * window would squeeze the world into each pane, while the grid, which works in
- * pixels, would not.
  *
  * Positions go through the matrix as float32, so a flock a million units out
  * would quantise. The pull toward the origin keeps it within a few thousand,
@@ -91,14 +86,7 @@ export interface BoidTarget {
 export interface BoidRenderer {
   /** Call it once per simulation, not per frame. */
   bind(feed: BoidFeed, trails: TrailHistory, ranges: FlockRanges): BoidTarget;
-  /** Draws into `rect`, which is left as the current GL viewport. */
-  draw(
-    target: BoidTarget,
-    camera: Camera,
-    pixelRatio: number,
-    style: Readonly<BoidStyle>,
-    rect: ViewportRect,
-  ): void;
+  draw(target: BoidTarget, camera: Camera, size: CanvasSize, style: Readonly<BoidStyle>): void;
   dispose(): void;
 }
 
@@ -109,12 +97,12 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
   const trailProgram = createProgram(gl, trailVertexSource, trailFragmentSource, 'trail');
   const trailUniforms = getUniformLocations(gl, trailProgram, TRAIL_UNIFORM_NAMES);
 
-  /** World to clip for one rect. Rewritten per draw; never escapes this module. */
+  /** World to clip. Rewritten per draw; never escapes this module. */
   const transform = new Float32Array(9);
 
-  const buildTransform = (camera: Camera, pixelRatio: number, rect: ViewportRect): void => {
-    const sx = (2 * camera.scale * pixelRatio) / Math.max(rect.width, 1);
-    const sy = (2 * camera.scale * pixelRatio) / Math.max(rect.height, 1);
+  const buildTransform = (camera: Camera, size: CanvasSize): void => {
+    const sx = (2 * camera.scale * size.pixelRatio) / Math.max(size.deviceWidth, 1);
+    const sy = (2 * camera.scale * size.pixelRatio) / Math.max(size.deviceHeight, 1);
     // Column-major, as the camera's own matrix is.
     transform[0] = sx;
     transform[1] = 0;
@@ -157,7 +145,8 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       };
     },
 
-    draw(target, camera, pixelRatio, style, rect): void {
+    draw(target, camera, size, style): void {
+      const { pixelRatio } = size;
       const count = target.feed.count;
       if (count === 0) return;
 
@@ -171,11 +160,10 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       const brightness = style.brightness * floorBrightness(style, camera.scale);
       const colourMode = COLOUR_INPUT_CODES[style.colourBy];
 
-      buildTransform(camera, pixelRatio, rect);
-      const pixelToClipX = 2 / Math.max(rect.width, 1);
-      const pixelToClipY = 2 / Math.max(rect.height, 1);
+      buildTransform(camera, size);
+      const pixelToClipX = 2 / Math.max(size.deviceWidth, 1);
+      const pixelToClipY = 2 / Math.max(size.deviceHeight, 1);
 
-      gl.viewport(rect.x, rect.y, rect.width, rect.height);
       gl.enable(gl.BLEND);
       // Both shaders emit premultiplied colour, so the source factor is ONE
       // either way and only the destination tells the two modes apart.
