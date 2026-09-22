@@ -196,6 +196,7 @@ export function createPanel(options: PanelOptions): Panel {
   lookFolder.addBinding(look, 'blend', { options: { additive: 'additive', alpha: 'alpha' } });
   lookFolder.addBinding(look, 'floorFade', { label: 'floor fade', min: 0, max: 2, step: 1 });
   lookFolder.addBinding(look, 'grid', { options: presetOptions(GRID_PRESETS) });
+  lookFolder.addBinding(look, 'snapLines', { label: 'snap lines' });
   lookFolder.addBinding(look, 'labels', { options: { edge: 'edge', axis: 'axis' } });
   lookFolder.addBinding(look, 'labelFormat', {
     label: 'format',

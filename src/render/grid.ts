@@ -4,7 +4,7 @@ import { createProgram, createVertexArray, draw, getUniformLocations, withDefine
 import fragmentSource from './grid.frag?raw';
 import vertexSource from './grid.vert?raw';
 import type { GridBand } from './grid-bands';
-import { bandPhase, computeBands, createBands, MAX_BANDS } from './grid-bands';
+import { axisWeight, bandPhase, computeBands, createBands, MAX_BANDS } from './grid-bands';
 import type { GridStyle } from './grid-style';
 import { ORIGIN_MARKER_CODES } from './grid-style';
 
@@ -24,12 +24,13 @@ const UNIFORM_NAMES = [
   'uBands',
   'uSpacing[0]',
   'uPhase[0]',
-  'uWeight[0]',
+  'uWeightLinear[0]',
+  'uSnapLines',
   'uLineWidth',
   'uLineColour',
   'uBrightness',
   'uOriginOffset',
-  'uAxisBoost',
+  'uAxisWeight',
   'uOriginMarker',
   'uOriginRadius',
   'uOriginBoost',
@@ -105,7 +106,9 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
         spacing[i] = band.spacing * pixelRatio;
         phase[i * 2] = bandPhase(camera.center.x, band.exponent, devicePixelsPerUnit);
         phase[i * 2 + 1] = bandPhase(camera.center.y, band.exponent, devicePixelsPerUnit);
-        weight[i] = band.weight;
+        // In light rather than in sRGB, because the shader multiplies it by a
+        // coverage and then converts the two together.
+        weight[i] = band.weight ** 2.2;
       }
 
       gl.useProgram(program);
@@ -114,8 +117,9 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       gl.uniform1i(uniforms.uBands, liveBands);
       gl.uniform1fv(uniforms['uSpacing[0]'], spacing);
       gl.uniform2fv(uniforms['uPhase[0]'], phase);
-      gl.uniform1fv(uniforms['uWeight[0]'], weight);
+      gl.uniform1fv(uniforms['uWeightLinear[0]'], weight);
 
+      gl.uniform1i(uniforms.uSnapLines, style.snapLines ? 1 : 0);
       gl.uniform1f(uniforms.uLineWidth, style.lineWidth * pixelRatio);
       gl.uniform3fv(uniforms.uLineColour, style.lineColor);
       gl.uniform1f(uniforms.uBrightness, style.brightness);
@@ -128,7 +132,10 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
         -camera.center.x * devicePixelsPerUnit,
         -camera.center.y * devicePixelsPerUnit,
       );
-      gl.uniform1f(uniforms.uAxisBoost, style.axisBoost);
+      // Bands are in CSS pixels here, so the viewport has to be too.
+      const room = Math.min(camera.viewportWidth, camera.viewportHeight);
+      const axis = axisWeight(bands, liveBands, room, style.fadeCurve);
+      gl.uniform1f(uniforms.uAxisWeight, axis * style.axisBoost);
 
       gl.uniform1i(uniforms.uOriginMarker, ORIGIN_MARKER_CODES[style.origin]);
       gl.uniform1f(uniforms.uOriginRadius, style.originRadius * pixelRatio);

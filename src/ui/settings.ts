@@ -66,6 +66,8 @@ export interface LookSettings {
 
   /** Name of a `GRID_PRESETS` entry. */
   grid: string;
+  /** Overrides the preset's `snapLines`, so the two can be compared live. */
+  snapLines: boolean;
   labels: LabelPlacement;
   labelFormat: LabelFormat;
 }
@@ -93,6 +95,7 @@ export function defaultSettings(): Settings {
       blend: DEFAULT_BOID_STYLE.blend,
       floorFade: DEFAULT_BOID_STYLE.floorFade,
       grid: DEFAULT_GRID_STYLE.name,
+      snapLines: DEFAULT_GRID_STYLE.snapLines,
       labels: DEFAULT_OVERLAY_OPTIONS.placement,
       labelFormat: DEFAULT_OVERLAY_OPTIONS.format,
     },
@@ -172,8 +175,20 @@ export function boidStyle(look: LookSettings): Readonly<BoidStyle> {
   return applyLook(findPreset(BOID_PRESETS, look.boid, DEFAULT_BOID_STYLE), look);
 }
 
+/** Grid presets with the panel's override on them, cached as `boidVariants` is. */
+const gridVariants = new Map<string, Readonly<GridStyle>>();
+
 export function gridStyle(look: LookSettings): Readonly<GridStyle> {
-  return findPreset(GRID_PRESETS, look.grid, DEFAULT_GRID_STYLE);
+  const base = findPreset(GRID_PRESETS, look.grid, DEFAULT_GRID_STYLE);
+  if (base.snapLines === look.snapLines) return base;
+
+  const key = `${base.name}|${look.snapLines}`;
+  let variant = gridVariants.get(key);
+  if (!variant) {
+    variant = Object.freeze({ ...base, snapLines: look.snapLines } satisfies GridStyle);
+    gridVariants.set(key, variant);
+  }
+  return variant;
 }
 
 /**
@@ -247,6 +262,7 @@ export function parse(text: string | null): Settings {
       GRID_PRESETS.map((preset) => preset.name),
       settings.look.grid,
     );
+    settings.look.snapLines = bool(look.snapLines, settings.look.snapLines);
     settings.look.trails = bool(look.trails, settings.look.trails);
     settings.look.blend = oneOf(look.blend, ['additive', 'alpha'] as const, settings.look.blend);
     settings.look.floorFade = clamp(num(look.floorFade, settings.look.floorFade), 0, 2);

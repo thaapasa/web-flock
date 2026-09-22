@@ -89,6 +89,44 @@ export function bandPhase(centre: number, exponent: number, pixelsPerUnit: numbe
   return (centre - spacing * Math.round(centre / spacing)) * pixelsPerUnit;
 }
 
+/**
+ * Decades over which a band stops counting toward the axes, as its lines
+ * spread past what the viewport can hold. Half a decade: long enough that the
+ * follow zoom cannot cross it in a breath, short enough that the axes still
+ * answer the zoom.
+ */
+const AXIS_FIT_DECADES = 0.5;
+
+/**
+ * The weight the axes draw at.
+ *
+ * An axis is a line of every decade at once, so at face value it never fades,
+ * while every line around it does. It takes the weight of the brightest decade
+ * whose lines the viewport can hold instead, which keeps it a reference line
+ * rather than the only bright thing at a distant zoom.
+ *
+ * A band's say fades out as its spacing approaches `viewport` rather than
+ * stopping at it. A hard edge flickers: the follow zoom breathes in and out,
+ * a band crosses the edge, and the axes jump a decade of brightness.
+ *
+ * `viewport` is in the same unit as the bands' spacing.
+ */
+export function axisWeight(
+  bands: readonly GridBand[],
+  count: number,
+  viewport: number,
+  curve: FadeCurve = 'smooth',
+): number {
+  const ramp = FADE_CURVES[curve];
+  let weight = 0;
+  for (let i = 0; i < count; i++) {
+    const band = bands[i];
+    const fit = Math.log10(viewport / band.spacing) / AXIS_FIT_DECADES;
+    weight = Math.max(weight, band.weight * ramp(Math.min(1, Math.max(0, fit))));
+  }
+  return weight;
+}
+
 /** The brightness the grid gives a line at world coordinate `value`: what the
  * shader does per pixel, in a form the tests can sweep. */
 export function lineBrightness(value: number, bands: readonly GridBand[], count: number): number {

@@ -74,6 +74,13 @@ export interface Overlay {
 }
 
 const LABEL_COLOUR = '212, 238, 255';
+
+/**
+ * The top of the tick labels' brightness range, which the coarse decade's
+ * labels draw at. The finer ones still fade up from nothing to it as their
+ * decade gains room.
+ */
+const LABEL_ALPHA = 0.5;
 const READOUT_COLOUR = 'rgba(150, 205, 235, 0.9)';
 const HELP_COLOUR = 'rgba(120, 165, 190, 0.55)';
 const HALO = 'rgba(0, 0, 0, 0.8)';
@@ -102,7 +109,8 @@ export function createOverlay(
   const scratch: Vec2 = { x: 0, y: 0 };
 
   /** Text with a dark halo, so it stays readable where it crosses a grid line. */
-  const label = (text: string, x: number, y: number, alpha: number): void => {
+  const label = (text: string, x: number, y: number, weight: number): void => {
+    const alpha = weight * LABEL_ALPHA;
     if (alpha <= 0.01) return;
     ctx.strokeStyle = HALO;
     ctx.lineWidth = 3;

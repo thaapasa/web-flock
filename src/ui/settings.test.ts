@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
 import { BOID_PRESETS } from '../render/boid-style';
+import { GRID_PRESETS } from '../render/grid-style';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 import { FLOCK_PRESETS } from '../sim/presets';
@@ -15,6 +16,7 @@ import {
   defaultSettings,
   exportLiteral,
   flockPresetName,
+  gridStyle,
   parse,
   serialise,
   simParams,
@@ -268,5 +270,22 @@ describe('cloneSettings', () => {
 
     expect(settings.flock.fieldOfView).toBe(DEFAULT_SIM_PARAMS.fieldOfView);
     expect(flockPresetName(settings.flock)).toBe(FLOCK_PRESETS[0].name);
+  });
+});
+
+describe('gridStyle', () => {
+  it('returns the preset itself when the override agrees with it', () => {
+    const look = defaultSettings().look;
+    expect(gridStyle(look)).toBe(GRID_PRESETS[0]);
+  });
+
+  it('overrides the preset and caches the result', () => {
+    const look = defaultSettings().look;
+    look.snapLines = !GRID_PRESETS[0].snapLines;
+
+    const style = gridStyle(look);
+    expect(style.snapLines).toBe(look.snapLines);
+    expect(style.name).toBe(GRID_PRESETS[0].name);
+    expect(gridStyle(look)).toBe(style);
   });
 });

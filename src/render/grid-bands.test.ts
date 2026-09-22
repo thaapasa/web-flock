@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  axisWeight,
   bandCount,
   bandPhase,
   bandWeight,
@@ -164,5 +165,49 @@ describe('phase reduction', () => {
     // A million world units out at 40 px per unit: what reaches the shader is
     // still a small number, not the difference of two large ones.
     expect(bandPhase(1_000_000.37, 0, 40)).toBeCloseTo(14.8, 6);
+  });
+});
+
+describe('axis weight', () => {
+  /** CSS pixels of the shorter side, from a phone to a large desktop. */
+  const VIEWPORTS = [600, 1000, 1800, 3000];
+
+  it.each(PRESET_CASES)('moves continuously as the zoom sweeps (%s)', (_name, style) => {
+    const bands = createBands();
+    for (const viewport of VIEWPORTS) {
+      let previous: number | null = null;
+      for (const logScale of zoomSweep(0.005)) {
+        const count = computeBands(10 ** logScale, style, bands);
+        const weight = axisWeight(bands, count, viewport, style.fadeCurve);
+
+        expect(weight).toBeGreaterThanOrEqual(0);
+        expect(weight).toBeLessThanOrEqual(1);
+        // The follow zoom moves in steps far smaller than this, so anything
+        // that jumps here flickers on screen.
+        if (previous !== null) expect(Math.abs(weight - previous)).toBeLessThan(0.05);
+        previous = weight;
+      }
+    }
+  });
+
+  it('counts a decade in full once its lines sit well inside the viewport', () => {
+    const bands = createBands();
+    for (const viewport of VIEWPORTS) {
+      for (const logScale of zoomSweep(0.013)) {
+        const count = computeBands(10 ** logScale, DEFAULT_GRID_STYLE, bands);
+        const weight = axisWeight(bands, count, viewport);
+        for (let i = 0; i < count; i++) {
+          if (bands[i].spacing * 10 ** 0.5 <= viewport) {
+            expect(weight).toBeGreaterThanOrEqual(bands[i].weight - 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it('gives the axes nothing when no decade fits the viewport', () => {
+    const bands = createBands();
+    const count = computeBands(1, DEFAULT_GRID_STYLE, bands);
+    expect(axisWeight(bands, count, 1)).toBe(0);
   });
 });

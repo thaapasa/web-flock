@@ -43,6 +43,15 @@ export interface GridStyle {
 
   readonly fadeCurve: FadeCurve;
 
+  /**
+   * Whether every line is moved to the nearest pixel centre.
+   *
+   * On, a line holds one brightness while the view moves, and moves a whole
+   * pixel at a time. Off, it sits where the world says and changes brightness
+   * as it crosses pixels. Which of the two reads better is a taste call.
+   */
+  readonly snapLines: boolean;
+
   /** CSS pixels. Below 1 the line is drawn dimmer rather than thinner. */
   readonly lineWidth: number;
   /** The grid's only colour. The axes and the origin share it. */
@@ -50,8 +59,14 @@ export interface GridStyle {
   /** Brightness of a fully faded-in line, 0..1. */
   readonly brightness: number;
 
-  /** How much brighter the axes are than a decade line at full strength: a
-   * multiplier on `brightness`, not a brightness. 1 hides them as axes. */
+  /**
+   * How much brighter the axes are than the brightest line on screen: a
+   * multiplier on that line's weight, not a brightness. 1 hides them as axes.
+   *
+   * It multiplies a value the display reads as sRGB, so the light it emits
+   * climbs by roughly the multiplier to the power of 2.2. 1.08 is the fifth of
+   * a stop it looks like; 1.3 is nearly twice the light.
+   */
   readonly axisBoost: number;
 
   readonly origin: OriginMarker;
@@ -72,11 +87,12 @@ function preset(overrides: Partial<GridStyle> & { name: string }): Readonly<Grid
     fadeDecades: 2,
     fadeCurve: 'smooth',
 
+    snapLines: true,
     lineWidth: 1,
     lineColor: CYAN,
     brightness: 0.55,
 
-    axisBoost: 1.3,
+    axisBoost: 1.08,
 
     origin: 'none',
     originRadius: 4,
