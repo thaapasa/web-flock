@@ -62,6 +62,17 @@ export interface SimParams extends FlockBehaviour {
   /** How many boids are simulated. Never exceeds the backend's capacity. */
   count: number;
 
+  /**
+   * How close two boids may get, in world units, or 0 to let them overlap.
+   *
+   * Separation is only a steering force, so a strong enough pull packs boids
+   * on top of each other. That is also what makes a clump slow, because every
+   * boid in it is a neighbour of every other. A minimum distance caps how
+   * many boids fit in a neighbourhood, so the step cost stays bounded however
+   * hard the flock is squeezed.
+   */
+  contactDistance: number;
+
   /** Cursor force: positive attracts, negative repels. */
   cursorStrength: number;
   /** World units. Outside this radius the cursor has no effect. */
@@ -74,6 +85,7 @@ export interface SimParams extends FlockBehaviour {
 /** The first preset, with the fields no preset carries around it. */
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
+  contactDistance: 10,
 
   ...flockBehaviour(DEFAULT_FLOCK_PRESET),
 

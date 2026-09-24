@@ -34,6 +34,14 @@ const DENSITY_SIGMAS = 1.5;
  */
 const DENSITY_TIME_CONSTANT = 1.5;
 
+/**
+ * Contact passes per step. One pass leaves overlaps in a packed crowd, and the
+ * next step's push to clear them makes headings twitch. Two held a clump
+ * under an attracting cursor with steadier headings than no contacts at all.
+ * Three were slower and no steadier.
+ */
+const CONTACT_PASSES = 2;
+
 /** Mutable view of the sample the flock owns and hands out as readonly. */
 interface MutableSample {
   positions: Float32Array;
@@ -68,6 +76,15 @@ class Flock implements Simulation {
 
   private readonly hash: SpatialHash;
   private readonly candidates: Int32Array;
+  /** Cells the size of the contact distance, far smaller than `hash` uses. */
+  private readonly contactHash: SpatialHash;
+  private readonly corrections: Float32Array;
+  /**
+   * Velocity the last step's contacts added, per boid. It goes into the next
+   * integration with the steering, so contacts obey the speed bounds and the
+   * turn rate like every other force.
+   */
+  private readonly contactPush: Float32Array;
 
   private readonly sampleState: MutableSample;
 
@@ -93,6 +110,9 @@ class Flock implements Simulation {
 
     this.hash = new SpatialHash(this.capacity);
     this.candidates = new Int32Array(this.capacity);
+    this.contactHash = new SpatialHash(this.capacity);
+    this.corrections = new Float32Array(this.capacity * 2);
+    this.contactPush = new Float32Array(this.capacity * 2);
 
     const sampleSize = Math.max(1, Math.min(Math.floor(options.sampleSize ?? 256), this.capacity));
     this.sampleState = {
@@ -141,6 +161,7 @@ class Flock implements Simulation {
 
     // Every slot, not just the live ones, so nothing is ever read uninitialised.
     this.densities.fill(0);
+    this.contactPush.fill(0);
     for (let i = 0; i < this.capacity; i++) {
       this.scatterOnSpawnDisc(i, random);
       this.noise[i] = seedNoise(seed, i);
@@ -340,6 +361,7 @@ class Flock implements Simulation {
     const cosMaxTurn = Math.cos(maxTurn);
     const sinMaxTurn = Math.sin(maxTurn);
 
+    const contactPush = this.contactPush;
     for (let i = 0; i < count; i++) {
       const vx = velocities[i * 2];
       const vy = velocities[i * 2 + 1];
@@ -347,8 +369,10 @@ class Flock implements Simulation {
       const oldX = oldSpeed > EPSILON ? vx / oldSpeed : 1;
       const oldY = oldSpeed > EPSILON ? vy / oldSpeed : 0;
 
-      const steeredX = vx + accelerations[i * 2] * dt;
-      const steeredY = vy + accelerations[i * 2 + 1] * dt;
+      const steeredX = vx + accelerations[i * 2] * dt + contactPush[i * 2];
+      const steeredY = vy + accelerations[i * 2 + 1] * dt + contactPush[i * 2 + 1];
+      contactPush[i * 2] = 0;
+      contactPush[i * 2 + 1] = 0;
       const steeredSpeed = Math.sqrt(steeredX * steeredX + steeredY * steeredY);
 
       // A positive test, so a NaN from anywhere upstream lands here and is
@@ -375,12 +399,106 @@ class Flock implements Simulation {
       positions[i * 2 + 1] += newY * dt;
     }
 
+    if (p.contactDistance > 0) {
+      for (let pass = 0; pass < CONTACT_PASSES; pass++) this.resolveContacts(p.contactDistance, dt);
+    }
+
     this.updateSample();
 
     this.rangeState.minSpeed = minSpeed;
     this.rangeState.maxSpeed = maxSpeed;
     const blend = Math.min(1, dt / DENSITY_TIME_CONSTANT);
     this.rangeState.maxDensity += (this.densityTarget - this.rangeState.maxDensity) * blend;
+  }
+
+  /**
+   * Pushes apart every pair of boids closer than `distance`, each by half the
+   * overlap.
+   *
+   * The push goes into the velocity as well as the position, through
+   * `contactPush`. If it only moved the position, a boid would keep the
+   * velocity that carried it into the crowd and be back inside it on the next
+   * step. Under an attracting cursor the crowd then packed to nearly a point
+   * anyway, with the step as slow as it was without contacts.
+   *
+   * Corrections are collected first and applied after, for the same reason
+   * the step has two passes: moving boids in place would make the result
+   * depend on the order they were visited in.
+   */
+  private resolveContacts(distance: number, dt: number): void {
+    const count = this._count;
+    const positions = this.positions;
+    const contactPush = this.contactPush;
+    const corrections = this.corrections;
+    const candidates = this.candidates;
+    const hash = this.contactHash;
+    const distance2 = distance * distance;
+    // A boid in the middle of a crowd gets pushed from every side, and on its
+    // edge from one side only. Without a cap the sum there can throw a boid
+    // several diameters in one step.
+    const maxCorrection = distance / 2;
+    const maxCorrection2 = maxCorrection * maxCorrection;
+
+    hash.build(positions, count, distance);
+    const entries = hash.entries;
+    const entryCellX = hash.entryCellX;
+    const entryCellY = hash.entryCellY;
+
+    let blockCellX = NaN;
+    let blockCellY = NaN;
+    let blockSize = 0;
+
+    for (let e = 0; e < count; e++) {
+      const cellX = entryCellX[e];
+      const cellY = entryCellY[e];
+      if (cellX !== blockCellX || cellY !== blockCellY) {
+        blockSize = hash.gatherCellBlock(cellX, cellY, candidates);
+        blockCellX = cellX;
+        blockCellY = cellY;
+      }
+
+      const i = entries[e];
+      const x = positions[i * 2];
+      const y = positions[i * 2 + 1];
+      let cx = 0;
+      let cy = 0;
+
+      for (let k = 0; k < blockSize; k++) {
+        const j = candidates[k];
+        if (j === i) continue;
+        const dx = positions[j * 2] - x;
+        const dy = positions[j * 2 + 1] - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= distance2) continue;
+
+        if (d2 > EPSILON) {
+          const d = Math.sqrt(d2);
+          const push = (distance - d) / (2 * d);
+          cx -= dx * push;
+          cy -= dy * push;
+        } else {
+          // Two boids on the same spot have no line between them to push
+          // along. The lower index goes left, so the pair splits instead of
+          // both moving the same way.
+          cx += i < j ? -maxCorrection : maxCorrection;
+        }
+      }
+
+      const c2 = cx * cx + cy * cy;
+      if (c2 > maxCorrection2) {
+        const scale = maxCorrection / Math.sqrt(c2);
+        cx *= scale;
+        cy *= scale;
+      }
+      corrections[i * 2] = cx;
+      corrections[i * 2 + 1] = cy;
+    }
+
+    const invDt = 1 / dt;
+    for (let k = 0; k < count * 2; k++) {
+      positions[k] += corrections[k];
+      contactPush[k] += corrections[k] * invDt;
+    }
   }
 
   /** Puts the bands where the flock is now, with no glide. */
@@ -431,6 +549,8 @@ class Flock implements Simulation {
       this.noise[i] = seedNoise(from ^ 0x7f4a7c15, i);
       this.wanderAngles[i] = (random() * 2 - 1) * Math.PI;
       this.densities[i] = 0;
+      this.contactPush[i * 2] = 0;
+      this.contactPush[i * 2 + 1] = 0;
 
       if (from === 0) {
         // No flock to join yet.

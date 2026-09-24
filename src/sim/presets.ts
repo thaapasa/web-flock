@@ -12,10 +12,9 @@ import type { FlockBehaviour } from './params';
  *
  * Every set here keeps `separationRadius` near half of `neighbourRadius`, and
  * leaves the force cap and the turn rate high enough to hold that spacing.
- * Below that the flock packs tighter than separation can push it apart, and
- * the neighbour search then costs the square of how crowded it got: a few
- * hundred candidates per boid, and the step no longer fits in a frame. What
- * looks like a performance bug is a tuning mistake.
+ * Below that the flock packs tighter than separation can push it apart, until
+ * `contactDistance` stops it. The step then costs several times what a
+ * well-spaced flock does, though it no longer grows without limit.
  */
 export interface FlockPreset extends FlockBehaviour {
   readonly name: string;

@@ -143,8 +143,12 @@ the lock, because the rate would then depend on speed.
 **Separation saturates, so a clump that forms stays.** The summed `1/d` vector is normalised before
 it steers, so it pushes no harder as the flock crowds, and it shares the force cap with cohesion.
 Deep inside a clump the terms cancel as well. The neighbour search costs the square of the density,
-so a flock that crowds is also a flock that lags. Every preset keeps the separation radius near half
-the neighbour radius, which avoids the problem rather than fixing it.
+so a flock that crowds is also a flock that lags.
+
+A minimum contact distance now caps the density, and with it the lag. At 5,000 boids the mill used
+to slow to over 20 ms a step and keep getting worse. At a contact distance of 10 it stays near 6 ms,
+measured in node. Separation still saturates, though, so a crowded flock packs down to the contact
+distance rather than holding its separation radius.
 
 ### 7b. Visual polish (Collaborate)
 

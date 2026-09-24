@@ -185,6 +185,7 @@ export function createApp(
         floorFade: style.floorFade,
         neighbourRadius: settings.flock.neighbourRadius,
         separationRadius: settings.flock.separationRadius,
+        contactDistance: settings.flock.contactDistance,
         minSpeed: settings.flock.minSpeed,
         maxSpeed: settings.flock.maxSpeed,
       },

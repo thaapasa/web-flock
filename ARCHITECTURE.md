@@ -40,6 +40,14 @@ velocities and neighbour counts as packed typed arrays, and finds neighbours thr
 which is where nearly all of the time goes. Parameters go in as plain data and take effect on the
 next step. Randomness is seeded, so two parameter sets can be compared from the same starting flock.
 
+**Boids keep a minimum distance apart, because that is what bounds the step's cost.** Separation is
+only a steering force, and a strong pull or a slow turn rate packs boids on top of each other. Every
+boid in a clump is then a neighbour of every other, so the step cost grows with the square of the
+density. After each step, a contact pass pushes apart any two boids closer than `contactDistance`.
+That caps how many fit in a neighbourhood, at roughly the square of the neighbour radius over the
+contact distance. The push also goes into the next step's velocity. Without that a boid keeps flying
+into the crowd, and the clump packs down anyway.
+
 It also hands out the summaries other parts need, a position sample for the camera and the speed and
 density ranges the renderer colours by, because it is the only thing that can afford to look at
 every boid.

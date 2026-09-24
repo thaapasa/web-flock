@@ -177,6 +177,29 @@ describe('flock', () => {
     expect(near(simulation)).toBeLessThan(before);
   });
 
+  it('keeps boids apart when an attracting cursor packs them together', () => {
+    const closest = (simulation: Simulation): number => {
+      const p = simulation.positions;
+      let min = Infinity;
+      for (let i = 0; i < simulation.count; i++) {
+        for (let j = i + 1; j < simulation.count; j++) {
+          min = Math.min(min, Math.hypot(p[j * 2] - p[i * 2], p[j * 2 + 1] - p[i * 2 + 1]));
+        }
+      }
+      return min;
+    };
+    const squeeze = { spawnRadius: 100, cursorStrength: 800, cursorRadius: 300 };
+    const packed = { cursor: { x: 0, y: 0 } };
+
+    const free = makeFlock({ ...squeeze, contactDistance: 0 });
+    run(free, 600, packed);
+    expect(closest(free), 'the squeeze is too weak to test anything').toBeLessThan(1);
+
+    const held = makeFlock({ ...squeeze, contactDistance: 6 });
+    run(held, 600, packed);
+    expect(closest(held)).toBeGreaterThan(3);
+  });
+
   it('adds new boids to the flock that is flying, not to where it started', () => {
     const params: SimParams = { ...DEFAULT_SIM_PARAMS, count: 200, spawnRadius: 100 };
     const simulation = createFlock({ capacity: 600, params, seed: 4 });

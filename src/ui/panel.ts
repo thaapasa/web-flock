@@ -77,6 +77,12 @@ export function createPanel(options: PanelOptions): Panel {
 
   const flockFolder: FolderApi = pane.addFolder({ title: 'flock', expanded: true });
   flockFolder.addBinding(flock, 'count', { min: 0, max: capacity, step: 10 });
+  flockFolder.addBinding(flock, 'contactDistance', {
+    label: 'contact',
+    min: 0,
+    max: 20,
+    step: 0.5,
+  });
   flockFolder.addBinding(flock, 'separationRadius', {
     label: 'separation r',
     min: 0,

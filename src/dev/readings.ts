@@ -33,6 +33,7 @@ export interface ReadingSettings {
   readonly floorFade: number;
   readonly neighbourRadius: number;
   readonly separationRadius: number;
+  readonly contactDistance: number;
   readonly minSpeed: number;
   readonly maxSpeed: number;
 }
@@ -67,6 +68,7 @@ function fields(settings: ReadingSettings): readonly (readonly [string, string])
     ['fade', String(settings.floorFade)],
     ['neighbour', String(settings.neighbourRadius)],
     ['separation', String(settings.separationRadius)],
+    ['contact', String(settings.contactDistance)],
     ['speed', `${settings.minSpeed}..${settings.maxSpeed}`],
   ];
 }
