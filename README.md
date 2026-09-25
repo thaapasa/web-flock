@@ -1,51 +1,83 @@
 # web-flock
 
-A flocking simulator in the browser. Up to five thousand boids on an unbounded plane, drawn as line
-art over an adaptive grid, with every parameter adjustable while it runs.
+A flocking simulator that runs in the browser. Up to 5,000 boids fly on an unbounded plane. They are
+drawn as line art over an adaptive grid, and you can change every parameter while the simulation
+runs.
 
 ## Running it
 
-Needs Node 24 and yarn 4.
+You need Node 24 and yarn 4.
 
 ```sh
 yarn install
 yarn dev          # http://localhost:5173
 ```
 
-`yarn check` runs the type check, the linter, the format check and the tests. `yarn build` builds
-into `dist/`. `yarn site` rebuilds `site/`, a built copy of the page kept in the repository: the
-host serves that directory as it stands, so refresh and commit it when the published page should
-change.
+Other commands:
+
+- `yarn check` runs the type check, the linter, the format check and the tests.
+- `yarn build` builds the app into `dist/`.
+- `yarn site` rebuilds `site/`.
+
+`site/` is a built copy of the page, kept in the repository. The host serves the directory exactly
+as it is committed. To change the published page, run `yarn site` and commit the result.
 
 ## Using it
 
-The parameter panel is top left, collapsed until you open it, and everything in it takes effect
-immediately:
+### Screen layout
 
-- **flock**: count, the rule weights and their radii, field of view, speed and turn limits, the pull
-  toward the origin, wander, and a spawn radius with a `restart` button beside it.
-- **cursor**: predator, attractor or nothing, with a strength and a reach drawn as a ring.
-- **camera**: follow, the zoom, and a button that frames the flock.
-- **look**: palette, trails, blending, grid preset, and tick labels.
+- Top left: the parameter panel. It starts collapsed.
+- The other three corners: the frame-time HUD, the coordinate readout and the key hints.
 
-Two buttons at the bottom print the current set to the console and reset everything to defaults.
-Your set is saved in `localStorage`. The other three corners show the frame-time HUD, the coordinate
-readout and the key hints.
+### Parameter panel
 
-With follow on, the camera centres on the flock and the zoom is a percentage of the flock's size:
-100% frames it, less flies you into the middle of it, and more leaves it a speck on the grid. The
-camera holds a zoom until the flock outgrows it, so the view does not hunt, and `zoom hold` and
-`zoom ease` say how far it lets the flock drift and how fast it follows. Turn follow off and the
-zoom is a plain scale you set yourself.
+Every change in the panel takes effect immediately. The panel has four sections:
 
-Wheel zooms. Drag pans, while follow is off. `z` frames the flock, and `+` and `-` zoom a small step
-at a time.
+- **flock**: the boid count, the contact distance, the rule weights and their radii, the field of
+  view, the speed and turn limits, the pull toward the origin, wander, and the spawn radius. The
+  `restart` button next to the spawn radius starts the flock again.
+- **cursor**: makes the cursor a predator, an attractor or nothing. It has a strength and a reach.
+  The reach is drawn as a ring around the cursor.
+- **camera**: follow, the zoom, and a button that fits the flock on screen.
+- **look**: the palette, trails, blending, the grid preset, and tick labels.
 
-A number key picks how the flock flies, from the sets in `sim/presets.ts`. Shift and a number key
-picks the palette. The readout names the one you are on, and says `custom` once you move a slider.
+The two buttons at the bottom of the panel print the current settings to the console and reset
+everything to defaults. Your settings are saved in `localStorage`.
 
-`p` records a frame-time reading and prints the log, and `P` clears it. Both go away with
-`src/dev/`.
+### Camera and zoom
+
+With follow on, the camera stays centred on the flock, and the zoom is a percentage of the flock's
+size:
+
+- 100% fits the flock on screen.
+- Less than 100% zooms into the middle of the flock.
+- More than 100% zooms out, and the flock becomes a small spot on the grid.
+
+The camera keeps its zoom until the flock grows or shrinks past a limit. This stops the view from
+zooming in and out all the time. Two settings control this:
+
+- `zoom hold`: how far the flock's size can change, in decades, before the zoom starts to follow.
+- `zoom ease`: the time constant, in seconds, of the zoom as it follows.
+
+With follow off, the zoom is a plain scale that you set yourself.
+
+### Controls
+
+| Input                | Action                                          |
+| -------------------- | ----------------------------------------------- |
+| Wheel                | Zoom                                            |
+| Drag                 | Pan, when follow is off                         |
+| `z`                  | Fit the flock on screen                         |
+| `+` / `-`            | Zoom in or out by a small step                  |
+| Number key           | Choose a flock preset from `src/sim/presets.ts` |
+| Shift and number key | Choose a palette                                |
+| `p`                  | Record a frame-time reading and print the log   |
+| `P`                  | Clear the frame-time log                        |
+
+The readout shows the name of the current flock preset and palette. When you move a slider, it shows
+`custom` instead.
+
+The `p` and `P` keys are temporary. They will be removed together with `src/dev/`.
 
 ## Related documentation
 

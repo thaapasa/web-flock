@@ -2,124 +2,185 @@
 
 ## Overview
 
-Vite, TypeScript and WebGL2 behind a thin wrapper. No engine and no framework, apart from Tweakpane
-for the parameter panel. The simulation runs on the CPU over typed arrays and targets five thousand
-boids.
+The app is built with Vite, TypeScript and WebGL2, with a thin GL wrapper of our own. There is no
+engine and no framework. The only UI library is Tweakpane, which draws the parameter panel. The
+simulation runs on the CPU over typed arrays and targets 5,000 boids.
 
-The page is two stacked canvases, WebGL for the scene and a 2D one for the text over it, plus the
-panel.
+The page has three layers:
 
-Where the code is:
+- a WebGL canvas for the scene
+- a 2D canvas on top of it for text
+- the parameter panel
 
+### Source layout
+
+- `src/app.ts`: connects the modules and runs the frame loop. Start reading here.
 - `src/sim`: the simulation and its parameters.
-- `src/render`: the GL wrapper, the grid, the boids, the text layer, and the shaders.
-- `src/camera`: the world/screen transform and the controls that move it.
-- `src/ui`: the settings, the panel bound to them, and persistence.
-- `src/dev`: a temporary frame-time log.
-- `src/app.ts`: wires it all together and runs the frame loop. Start reading there.
+- `src/render`: the GL wrapper, the grid, the boids, the text layer and the shaders.
+- `src/camera`: the transform between world and screen, and the controls that move the camera.
+- `src/ui`: the settings, the panel that edits them, and saving them.
+- `src/dev`: a temporary log of frame times.
 
-## The frame loop
+## Frame loop
 
-Each frame:
+Each frame, the loop:
 
-1. Add the elapsed time to an accumulator.
-2. Run whole simulation steps at 120 Hz until the accumulator is spent, capturing a trail sample
-   every fourth step.
-3. Move the camera.
-4. Upload the boid state to the GPU.
-5. Draw the grid, the trail ribbons, the chevrons, and the text over them.
+1. Adds the elapsed time to an accumulator.
+2. Runs simulation steps of 1/120 s until less than one step's worth of time is left. Every fourth
+   step also records a trail sample.
+3. Moves the camera.
+4. Uploads the boid state to the GPU.
+5. Draws the grid, then the trail ribbons, then the chevrons, then the text.
 
-The timestep is fixed, so behaviour does not change with the framerate and a frame hitch produces
-several normal steps instead of one huge one. A frame runs at most five steps and drops the rest, so
-a slow step cannot lock the page up. The HUD shows `behind` when that happens.
+The timestep is fixed for two reasons:
+
+- The flock behaves the same at any framerate.
+- After a slow frame, the loop runs several normal steps instead of one long one.
+
+A frame runs at most five steps and discards the remaining time, so a slow step cannot freeze the
+page. When this happens, the HUD shows `behind`.
 
 ## Simulation
 
-`src/sim/simulation.ts` is the interface and `flock.ts` the implementation. It owns positions,
-velocities and neighbour counts as packed typed arrays, and finds neighbours through a spatial hash,
-which is where nearly all of the time goes. Parameters go in as plain data and take effect on the
-next step. Randomness is seeded, so two parameter sets can be compared from the same starting flock.
+The interface is in `src/sim/simulation.ts` and the implementation in `src/sim/flock.ts`.
 
-**Boids keep a minimum distance apart, because that is what bounds the step's cost.** Separation is
-only a steering force, and a strong pull or a slow turn rate packs boids on top of each other. Every
-boid in a clump is then a neighbour of every other, so the step cost grows with the square of the
-density. After each step, a contact pass pushes apart any two boids closer than `contactDistance`.
-That caps how many fit in a neighbourhood, at roughly the square of the neighbour radius over the
-contact distance. The push also goes into the next step's velocity. Without that a boid keeps flying
-into the crowd, and the clump packs down anyway.
+- State: positions, velocities and neighbour counts, stored as packed typed arrays.
+- Neighbour search: a spatial hash. Nearly all of the step time is spent here.
+- Parameters: plain data, applied from the next step on.
+- Randomness: seeded, so two parameter sets can be compared starting from the same flock.
 
-It also hands out the summaries other parts need, a position sample for the camera and the speed and
-density ranges the renderer colours by, because it is the only thing that can afford to look at
-every boid.
+### Minimum distance between boids
 
-**A GPU backend has to be able to replace it.** That is why `Simulation` contains no GL, and why
-per-boid data reaches the GPU through a separate interface, `BoidFeed`, which belongs to the
-renderer. The CPU backend gets an uploading feed wrapped around it. A GPU backend would implement
-both and hand over the buffer it had already filled, with nothing read back off the GPU.
+Boids keep a minimum distance apart. This is what keeps the cost of a step bounded.
+
+Separation is only a steering force. With a strong pull or a slow turn rate, boids end up on top of
+each other. In such a clump every boid is a neighbour of every other boid, so the cost of a step
+grows with the square of the density.
+
+To prevent this, a contact pass runs after each step and pushes apart any two boids closer than
+`contactDistance`. This limits the number of boids in one neighbourhood to roughly
+`(neighbour radius / contact distance)²`.
+
+The push is also added to the velocity for the next step. Without it, a boid that was pushed out
+keeps flying back into the crowd, and the clump packs down anyway.
+
+### Summaries for other modules
+
+The simulation also computes values that other modules need:
+
+- a sample of boid positions, for the camera
+- the ranges of speed and density, which the renderer uses for colour
+
+These are computed in the simulation because no other module can afford to loop over every boid.
+
+### Replacing it with a GPU backend
+
+A GPU backend must be able to replace the simulation. For that reason:
+
+- `Simulation` contains no GL code.
+- Per-boid data reaches the GPU through a separate interface, `BoidFeed`, which the renderer owns.
+
+The CPU backend is wrapped in a feed that uploads its arrays. A GPU backend would implement both
+interfaces and give the renderer the buffer it has already filled, so nothing is read back from the
+GPU.
 
 ## Rendering
 
-The grid is one fullscreen shader pass with no geometry: lines are found per pixel from the decades
-of spacing currently visible, and each decade fades in and out as you zoom. That is what makes the
-plane unbounded, since there is nothing to run out of however far the flock travels.
+### Grid
 
-The shader works in device pixels and never sees a world coordinate. Float32 runs out of mantissa
-once the flock has migrated far from the origin, and the lines start to shimmer. The CPU reduces the
-world position to a small pixel offset in float64 before the upload.
+The grid is a single fullscreen shader pass with no geometry. For each pixel, the shader works out
+which lines pass through it, using the decades of line spacing that are currently visible. Each
+decade fades in and out as you zoom. Since there is no geometry, the grid covers the plane however
+far the flock travels.
 
-The boids are two instanced draws, the trail ribbons and then the chevrons over them. Trail history
-is a texture of recent samples, one column per boid. Samples are captured on simulation steps rather
-than on frames, so a trail is a length of time rather than a length of framerate.
+The shader works in device pixels and never receives a world coordinate. Far from the origin,
+float32 does not have enough precision for world positions, and the lines start to shimmer. To avoid
+this, the CPU converts the world position to a small pixel offset in float64 before uploading it.
 
-Both boid shaders emit premultiplied colour, so the source blend factor is `ONE` whichever mode is
-set and only the destination factor tells additive from alpha. One shader serves both.
+### Boids
 
-Colour ramps span the ranges the simulation reports rather than fixed values, so retuning the flock
-cannot leave a style pointing at a range no boid reaches. Everything else adjustable about the look
-is a named preset in `grid-style.ts` or `boid-style.ts`; a renderer has no appearance of its own.
+The boids are drawn with two instanced draw calls: the trail ribbons first, then the chevrons on
+top.
+
+Trail history is stored in a texture of recent samples, one column per boid. Samples are recorded on
+simulation steps, not on frames, so a trail covers a fixed length of simulated time at any
+framerate.
+
+Both boid shaders output premultiplied colour. The source blend factor is then `ONE` in both blend
+modes, and only the destination factor differs between additive and alpha blending. One shader
+serves both modes.
+
+### Colour and styles
+
+Colour ramps span the speed and density ranges that the simulation reports, not fixed values. That
+way, retuning the flock cannot leave a style with a ramp over a range that no boid reaches.
+
+Everything else about the look that the user can adjust is a named preset in
+`src/render/grid-style.ts` or `src/render/boid-style.ts`. The renderers have no built-in appearance.
 
 ## Camera
 
-World space has +y up, and the flip to screen space happens in `camera/camera.ts` and nowhere else.
-Zoom is held as log10 pixels per world unit, which suits the grid's per-decade fade.
+World space has +y up. The flip to screen space happens only in `src/camera/camera.ts`.
 
-With follow on, the camera centres on the flock every frame and takes its zoom from the flock's
-size. Otherwise the pointer drags the centre and the zoom is whatever the user set.
+Zoom is stored as log10 of pixels per world unit. This matches the grid, which fades lines in and
+out per decade.
 
-The centre needs no smoothing, because a centroid of hundreds of boids barely jitters. The zoom
-does: the flock's reach moves every step, and a zoom that answered it would hunt, which pulls the
-grid's decades in and out and makes a correct grid look broken. So the zoom moves only the distance
-past a deadband, and eases rather than jumps. It is lazier zooming in than out, because boids about
-to leave the screen are urgent and empty space is not.
+### Following the flock
 
-A fit measures the flock across a quantile of the sample rather than all of it, so one straggler
-cannot drag the camera.
+With follow on, the camera centres on the flock every frame and sets the zoom from the flock's size.
+With follow off, dragging the pointer moves the centre, and the zoom stays where the user set it.
+
+The centre is not smoothed, because the centroid of hundreds of boids barely moves between frames.
+
+The zoom is smoothed. The flock's size changes every step, and a zoom that followed it directly
+would keep oscillating. The grid's decades would then fade in and out, and a correct grid would look
+broken. So the zoom:
+
+- responds only to the part of a change that goes past a deadband
+- eases toward its target instead of jumping
+- zooms in more slowly than it zooms out, because boids about to leave the screen need a quick
+  response and empty space around the flock does not
+
+To measure the flock's size, the camera takes a quantile of the sampled positions rather than the
+farthest one, so a single straggler cannot pull the camera away.
 
 ## Settings
 
-One object holds everything the user can change. The panel binds to it and changes it in place, as
-do the wheel and the preset keys, so there is no second copy to keep in step. `src/app.ts` is the
-only place that turns it into simulation parameters, styles and a camera.
+A single object holds everything the user can change. The panel, the mouse wheel and the preset keys
+all change this object in place, so there is no second copy that could go out of sync. `src/app.ts`
+is the only place that turns it into simulation parameters, styles and a camera.
 
-Sets are saved in `localStorage` and validated on the way back in, because the stored text can come
-from an older build or from a user who edited it. The look is saved as preset names plus overrides
-rather than as a finished style, so retuning a preset still reaches saved sets.
+### Saved sets
 
-How the flock flies is a named preset too, in `sim/presets.ts`. It carries the rules and nothing
-else, so picking one leaves the count, the spawn disc and the cursor as they were. This one is saved
-as values rather than as a name, because a slider moves the set off the preset and that has to
-survive a reload. The name in the readout comes from comparing the values, so a slider that lands
-back on a preset's value picks that name up again.
+Sets of settings are saved in `localStorage`. They are validated when loaded, because the stored
+text may come from an older build or may have been edited by hand.
+
+The look is saved as preset names plus overrides, not as a finished style. When a preset is retuned
+later, saved sets that use it get the change.
+
+### Flock presets
+
+How the flock flies is also a named preset, defined in `src/sim/presets.ts`. A flock preset contains
+only the flocking rules. Choosing one leaves the boid count, the spawn disc and the cursor as they
+were.
+
+Unlike the look, the flock preset is saved as values, not as a name. Moving a slider takes the set
+off its preset, and that change has to survive a reload. The readout finds the preset name by
+comparing values, so when a slider goes back to a preset's value, the readout shows that preset's
+name again.
 
 ## Tests
 
-Tests sit beside the code they cover and run in node. Three are worth reading as a specification:
-`sim/spatial-hash.test.ts` checks the index against brute force, `sim/flock.test.ts` pins the flock
-as bounded and free of NaN, and `render/grid-bands.test.ts` asserts that no grid line pops as the
-zoom sweeps across six decades.
+Tests sit next to the code they cover and run in Node. Three of them describe the intended behaviour
+and are worth reading:
+
+- `src/sim/spatial-hash.test.ts` compares the index with a brute-force search.
+- `src/sim/flock.test.ts` checks that the flock stays bounded and produces no NaN values.
+- `src/render/grid-bands.test.ts` checks that no grid line appears or disappears abruptly while the
+  zoom sweeps across six decades.
 
 ## Related documentation
 
-- [README.md](README.md): how to run it, and what the controls do.
+- [README.md](README.md): how to run the app, and what the controls do.
 - [PLAN.md](PLAN.md): what is done and what is left.
 - [CLAUDE.md](CLAUDE.md): the visual and technical direction.
