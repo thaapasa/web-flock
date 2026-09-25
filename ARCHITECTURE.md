@@ -84,7 +84,42 @@ The CPU backend is wrapped in a feed that uploads its arrays. A GPU backend woul
 interfaces and give the renderer the buffer it has already filled, so nothing is read back from the
 GPU.
 
+That backend would have to run on WebGPU, and so would the renderer. See [Why WebGL2](#why-webgl2).
+
 ## Rendering
+
+### Why WebGL2
+
+WebGL2 was chosen because it runs in nearly every browser. There was no other reason.
+
+WebGPU would not make the current renderer faster. Each frame is one fullscreen pass and two
+instanced draws, and nearly all of the frame time is spent in the simulation on the CPU.
+
+#### When to switch to WebGPU
+
+Switch when the simulation moves to the GPU, or when the boid count has to grow well past what the
+CPU can step. A GPU neighbour search needs compute shaders, storage buffers and atomics. WebGL2 has
+none of these. The search would have to be built from transform feedback or textures, which is much
+harder.
+
+Switching the renderer on its own gains little. Moving the simulation on its own does not work:
+WebGL and WebGPU cannot share buffers, and `BoidFeed` and `TrailHistory` give the renderer WebGL
+objects. A WebGPU simulation behind the WebGL renderer would have to read its results back to the
+CPU every frame, which is what `BoidFeed` exists to prevent.
+
+#### How to switch
+
+1. Change `BoidFeed` and `TrailHistory` to give the renderer `GPUBuffer`s. The trail history becomes
+   a storage buffer instead of a texture, since WebGPU lets a vertex shader index a buffer directly.
+2. Port the renderer and its shaders to WebGPU and WGSL, still fed by the CPU simulation through
+   uploads. Compare the result with the WebGL version by eye before going further. The look was
+   tuned by eye, so any difference at this point comes from the port and not from the simulation.
+3. Add the compute backend. It implements both `Simulation` and `BoidFeed`, and its `sync` does
+   nothing.
+4. Decide what browsers without WebGPU get. Either they keep the WebGL renderer with the CPU
+   simulation, which means maintaining two renderers, or they get an error page.
+
+WGSL has no float64, just like GLSL ES, so the grid still needs its offset computed on the CPU.
 
 ### Grid
 
