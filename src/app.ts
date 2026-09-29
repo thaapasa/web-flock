@@ -42,9 +42,6 @@ import { createLocalStorage } from './ui/storage';
  * where they meet, and `dispose` takes them down again.
  */
 
-/** Seconds per simulation step. 120 Hz, so a 60 fps frame is two steps. */
-const FIXED_STEP = 1 / 120;
-
 /**
  * Longest real interval one frame may advance the simulation. A backgrounded
  * tab comes back with an enormous elapsed time, and without this the
@@ -53,13 +50,14 @@ const FIXED_STEP = 1 / 120;
 const MAX_FRAME_TIME = 0.25;
 
 /**
- * Most steps one frame may run. Past this it drops the time it still owes. A
- * 60 Hz display needs two steps a frame and a 30 Hz one four.
+ * Most steps one frame may run. Past this it drops the time it still owes. At
+ * 120 steps a second, a 60 Hz display needs two steps a frame and a 30 Hz one
+ * four.
  */
 const MAX_STEPS_PER_FRAME = 5;
 
-/** Simulation steps between trail captures: 30 Hz against the 120 Hz step. */
-const TRAIL_CAPTURE_STEPS = 4;
+/** Trail samples per second. The step rate must be a multiple of it. */
+const TRAIL_CAPTURE_RATE = 30;
 
 /**
  * Boids the arrays are sized for. They are allocated once, so this is also the
@@ -186,6 +184,8 @@ export function createApp(
         neighbourRadius: settings.flock.neighbourRadius,
         separationRadius: settings.flock.separationRadius,
         contactDistance: settings.flock.contactDistance,
+        crowdPressure: settings.flock.crowdPressure,
+        stepRate: settings.clock.stepRate,
         minSpeed: settings.flock.minSpeed,
         maxSpeed: settings.flock.maxSpeed,
       },
@@ -311,26 +311,28 @@ export function createApp(
     const pushing = cursorOverCanvas && settings.cursor.mode !== 'nothing';
     input.cursor = pushing ? cursor : null;
 
+    const fixedStep = 1 / settings.clock.stepRate;
+    const captureSteps = settings.clock.stepRate / TRAIL_CAPTURE_RATE;
     let steps = 0;
     let simMs = 0;
-    while (accumulator >= FIXED_STEP && steps < MAX_STEPS_PER_FRAME) {
+    while (accumulator >= fixedStep && steps < MAX_STEPS_PER_FRAME) {
       // Timed per step, not around the loop, so the trail capture below does
       // not count as simulation time.
       const stepStarted = performance.now();
-      simulation.step(FIXED_STEP, input);
+      simulation.step(fixedStep, input);
       simMs += performance.now() - stepStarted;
 
-      accumulator -= FIXED_STEP;
+      accumulator -= fixedStep;
       steps++;
 
       // Inside the loop: a frame that runs several steps has several moments
       // to record, and taking them all from the last one bunches the trail up.
-      if (++stepsSinceCapture >= TRAIL_CAPTURE_STEPS) {
+      if (++stepsSinceCapture >= captureSteps) {
         stepsSinceCapture = 0;
         trails.capture();
       }
     }
-    const behind = accumulator >= FIXED_STEP;
+    const behind = accumulator >= fixedStep;
     if (behind) accumulator = 0;
     stats.record(frameMs, simMs, steps, behind);
 

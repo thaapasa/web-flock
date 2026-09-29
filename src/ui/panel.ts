@@ -13,7 +13,7 @@ import { BOID_PRESETS } from '../render/boid-style';
 import { GRID_PRESETS } from '../render/grid-style';
 import { formatFramePercent, formatScale } from '../render/overlay';
 import type { Settings } from './settings';
-import { cloneSettings, copyInto, CURSOR_MODES } from './settings';
+import { cloneSettings, copyInto, CURSOR_MODES, STEP_RATES } from './settings';
 
 /** Degrees, for an angle the simulation keeps in radians. */
 const DEGREES = (value: number): string => `${((value * 180) / Math.PI).toFixed(0)}°`;
@@ -71,7 +71,7 @@ function presetOptions(presets: readonly { readonly name: string }[]): Record<st
 // most of its travel makes the flock feel broken when it is not.
 export function createPanel(options: PanelOptions): Panel {
   const { container, settings, capacity, hooks } = options;
-  const { flock, cursor, camera, look } = settings;
+  const { flock, clock, cursor, camera, look } = settings;
 
   const pane = new Pane({ container, title: 'web-flock', expanded: false });
 
@@ -82,6 +82,12 @@ export function createPanel(options: PanelOptions): Panel {
     min: 0,
     max: 20,
     step: 0.5,
+  });
+  flockFolder.addBinding(flock, 'crowdPressure', {
+    label: 'pressure',
+    min: 0,
+    max: 8,
+    step: 0.1,
   });
   flockFolder.addBinding(flock, 'separationRadius', {
     label: 'separation r',
@@ -142,6 +148,10 @@ export function createPanel(options: PanelOptions): Panel {
   flockFolder.addBinding(flock, 'wanderStrength', { label: 'wander', min: 0, max: 30, step: 0.1 });
   flockFolder.addBinding(flock, 'wanderRate', { label: 'wander rate', min: 0, max: 8, step: 0.1 });
 
+  flockFolder.addBinding(clock, 'stepRate', {
+    label: 'step rate',
+    options: Object.fromEntries(STEP_RATES.map((rate) => [`${rate} Hz`, rate])),
+  });
   flockFolder.addBinding(flock, 'spawnRadius', { label: 'spawn r', min: 10, max: 2000, step: 10 });
   flockFolder.addButton({ title: 'restart' }).on('click', () => {
     hooks.restart();

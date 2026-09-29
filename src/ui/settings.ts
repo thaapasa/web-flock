@@ -72,8 +72,20 @@ export interface LookSettings {
   labelFormat: LabelFormat;
 }
 
+/** Simulation steps per second that `ClockSettings.stepRate` may take. */
+export const STEP_RATES: readonly number[] = [60, 90, 120];
+
+export interface ClockSettings {
+  /**
+   * Simulation steps per second. The step cost is the same at any rate, so 60
+   * costs half of what 120 does.
+   */
+  stepRate: number;
+}
+
 export interface Settings {
   flock: FlockSettings;
+  clock: ClockSettings;
   cursor: CursorSettings;
   camera: CameraSettings;
   look: LookSettings;
@@ -84,6 +96,7 @@ export function defaultSettings(): Settings {
   const { cursorStrength, ...flock } = DEFAULT_SIM_PARAMS;
   return {
     flock: { ...flock },
+    clock: { stepRate: 120 },
     cursor: {
       mode: cursorStrength === 0 ? 'nothing' : cursorStrength < 0 ? 'predator' : 'attractor',
       strength: Math.abs(cursorStrength),
@@ -223,6 +236,11 @@ export function parse(text: string | null): Settings {
 
   mergeNumbers(settings.flock, from.flock);
 
+  const clock = from.clock;
+  if (isRecord(clock) && STEP_RATES.includes(num(clock.stepRate, NaN))) {
+    settings.clock.stepRate = num(clock.stepRate, settings.clock.stepRate);
+  }
+
   const cursor = from.cursor;
   if (isRecord(cursor)) {
     settings.cursor.mode = oneOf(cursor.mode, CURSOR_MODES, settings.cursor.mode);
@@ -281,6 +299,7 @@ export function parse(text: string | null): Settings {
 export function cloneSettings(settings: Settings): Settings {
   return {
     flock: { ...settings.flock },
+    clock: { ...settings.clock },
     cursor: { ...settings.cursor },
     camera: { ...settings.camera },
     look: { ...settings.look },
@@ -293,6 +312,7 @@ export function cloneSettings(settings: Settings): Settings {
  */
 export function copyInto(target: Settings, source: Settings): void {
   Object.assign(target.flock, source.flock);
+  Object.assign(target.clock, source.clock);
   Object.assign(target.cursor, source.cursor);
   Object.assign(target.camera, source.camera);
   Object.assign(target.look, source.look);

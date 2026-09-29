@@ -200,6 +200,20 @@ describe('flock', () => {
     expect(closest(held)).toBeGreaterThan(3);
   });
 
+  it('stays finite under crowd pressure with nothing else keeping boids apart', () => {
+    // The pressure has no cap and grows as 1/distance, so boids squeezed
+    // nearly onto each other get a huge push.
+    const simulation = makeFlock({
+      spawnRadius: 100,
+      cursorStrength: 800,
+      cursorRadius: 300,
+      contactDistance: 0,
+      crowdPressure: 8,
+    });
+    run(simulation, 600, { cursor: { x: 0, y: 0 } });
+    expectAllFinite(simulation, 'crowd pressure');
+  });
+
   it('adds new boids to the flock that is flying, not to where it started', () => {
     const params: SimParams = { ...DEFAULT_SIM_PARAMS, count: 200, spawnRadius: 100 };
     const simulation = createFlock({ capacity: 600, params, seed: 4 });

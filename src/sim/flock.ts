@@ -193,6 +193,8 @@ class Flock implements Simulation {
     const cellSize = Math.max(neighbourRadius, separationRadius, EPSILON);
     const neighbourRadius2 = neighbourRadius * neighbourRadius;
     const separationRadius2 = separationRadius * separationRadius;
+    const crowdPressure = Math.max(p.crowdPressure, 0);
+    const pressured = crowdPressure > 0;
 
     const maxSpeed = Math.max(p.maxSpeed, EPSILON);
     const minSpeed = Math.min(Math.max(p.minSpeed, 0), maxSpeed);
@@ -258,10 +260,18 @@ class Flock implements Simulation {
         if (distance2 < EPSILON) continue;
 
         if (distance2 <= separationRadius2) {
-          // Points away from the neighbour and falls off as 1/distance, so a
-          // boid almost touching another dominates one merely nearby.
-          separationX -= dx / distance2;
-          separationY -= dy / distance2;
+          if (pressured) {
+            // Zero at the radius and growing as 1/distance inside it.
+            const distance = Math.sqrt(distance2);
+            const push = (separationRadius - distance) / distance2;
+            separationX -= dx * push;
+            separationY -= dy * push;
+          } else {
+            // Points away from the neighbour and falls off as 1/distance, so a
+            // boid almost touching another dominates one merely nearby.
+            separationX -= dx / distance2;
+            separationY -= dy / distance2;
+          }
         }
 
         if (distance2 <= neighbourRadius2) {
@@ -286,7 +296,7 @@ class Flock implements Simulation {
       let ay = 0;
 
       const separationMagnitude = Math.sqrt(separationX * separationX + separationY * separationY);
-      if (separationMagnitude > EPSILON) {
+      if (!pressured && separationMagnitude > EPSILON) {
         const scale = maxSpeed / separationMagnitude;
         ax += p.separationWeight * (separationX * scale - vx);
         ay += p.separationWeight * (separationY * scale - vy);
@@ -320,6 +330,14 @@ class Flock implements Simulation {
         const scale = maxForce / force;
         ax *= scale;
         ay *= scale;
+      }
+
+      // Outside the cap, since a cap is what makes separation saturate. The
+      // speed and turn limits in pass two still bound it.
+      if (pressured) {
+        const scale = p.separationWeight * crowdPressure * maxSpeed;
+        ax += separationX * scale;
+        ay += separationY * scale;
       }
 
       // A linear spring: negligible near the origin, so the flock migrates

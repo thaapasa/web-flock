@@ -26,8 +26,9 @@ The page has three layers:
 Each frame, the loop:
 
 1. Adds the elapsed time to an accumulator.
-2. Runs simulation steps of 1/120 s until less than one step's worth of time is left. Every fourth
-   step also records a trail sample.
+2. Runs fixed simulation steps until less than one step's worth of time is left. The panel sets the
+   step rate to 60, 90 or 120 steps a second, and 120 is the default. Trail samples are recorded 30
+   times a second.
 3. Moves the camera.
 4. Uploads the boid state to the GPU.
 5. Draws the grid, then the trail ribbons, then the chevrons, then the text.
@@ -63,6 +64,17 @@ To prevent this, a contact pass runs after each step and pushes apart any two bo
 
 The push is also added to the velocity for the next step. Without it, a boid that was pushed out
 keeps flying back into the crowd, and the clump packs down anyway.
+
+### Crowd pressure
+
+The classic separation rule steers away at full strength from any neighbour inside the separation
+radius. Most boids therefore settle exactly at that radius, or exactly at the contact distance when
+the flock is pulled tight. Both look like a regular lattice.
+
+Setting `crowdPressure` above 0 replaces the rule with one whose push starts at zero at the
+separation radius, grows as boids get closer, and adds up over all close neighbours. It is not
+limited by the force cap. The spacing then spreads out between the contact distance and the
+separation radius. At 0 the flock is the same as without the setting.
 
 ### Summaries for other modules
 

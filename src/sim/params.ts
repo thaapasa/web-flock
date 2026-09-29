@@ -73,6 +73,19 @@ export interface SimParams extends FlockBehaviour {
    */
   contactDistance: number;
 
+  /**
+   * Replaces the separation rule with one that pushes harder the more crowded
+   * a boid is, or 0 for the classic rule.
+   *
+   * The classic rule steers away at full strength from any neighbour inside
+   * the separation radius, however close it is. Most boids therefore settle
+   * right at that radius, and a flock pulled tighter packs right at the
+   * contact distance. Both read as a uniform lattice. This rule grows from
+   * nothing at the radius and adds up over neighbours, so the spacing spreads
+   * out between the two.
+   */
+  crowdPressure: number;
+
   /** Cursor force: positive attracts, negative repels. */
   cursorStrength: number;
   /** World units. Outside this radius the cursor has no effect. */
@@ -85,7 +98,8 @@ export interface SimParams extends FlockBehaviour {
 /** The first preset, with the fields no preset carries around it. */
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
-  contactDistance: 10,
+  contactDistance: 8,
+  crowdPressure: 0,
 
   ...flockBehaviour(DEFAULT_FLOCK_PRESET),
 

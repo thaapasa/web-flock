@@ -34,6 +34,8 @@ export interface ReadingSettings {
   readonly neighbourRadius: number;
   readonly separationRadius: number;
   readonly contactDistance: number;
+  readonly crowdPressure: number;
+  readonly stepRate: number;
   readonly minSpeed: number;
   readonly maxSpeed: number;
 }
@@ -69,6 +71,8 @@ function fields(settings: ReadingSettings): readonly (readonly [string, string])
     ['neighbour', String(settings.neighbourRadius)],
     ['separation', String(settings.separationRadius)],
     ['contact', String(settings.contactDistance)],
+    ['pressure', String(settings.crowdPressure)],
+    ['step', `${settings.stepRate} Hz`],
     ['speed', `${settings.minSpeed}..${settings.maxSpeed}`],
   ];
 }
