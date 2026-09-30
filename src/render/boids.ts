@@ -42,6 +42,7 @@ const UNIFORM_NAMES = [
   'uColourMode',
   'uRange',
   'uLowColour',
+  'uMidColour',
   'uHighColour',
 ] as const;
 
@@ -61,6 +62,7 @@ const TRAIL_UNIFORM_NAMES = [
   'uTrailColour',
   'uRange',
   'uLowColour',
+  'uMidColour',
   'uHighColour',
 ] as const;
 
@@ -194,6 +196,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
         gl.uniform1i(trailUniforms.uTrailColour, TRAIL_COLOUR_CODES[style.trailColour]);
         gl.uniform2f(trailUniforms.uRange, low, high);
         gl.uniform3fv(trailUniforms.uLowColour, style.lowColor);
+        gl.uniform3fv(trailUniforms.uMidColour, style.midColor);
         gl.uniform3fv(trailUniforms.uHighColour, style.highColor);
 
         // Two vertices per sample, one strip per boid.
@@ -216,6 +219,7 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       gl.uniform1i(uniforms.uColourMode, colourMode);
       gl.uniform2f(uniforms.uRange, low, high);
       gl.uniform3fv(uniforms.uLowColour, style.lowColor);
+      gl.uniform3fv(uniforms.uMidColour, style.midColor);
       gl.uniform3fv(uniforms.uHighColour, style.highColor);
 
       drawInstanced(gl, target.vao, gl.TRIANGLE_STRIP, 4, count);

@@ -41,7 +41,7 @@ Every change in the panel takes effect immediately. The panel has five sections:
 - **cursor**: makes the cursor a predator, an attractor or nothing. It has a strength and a reach.
   The reach is drawn as a ring around the cursor.
 - **camera**: follow, the zoom, and a button that fits the flock on screen.
-- **look**: the palette, trails, blending, the grid preset, and tick labels.
+- **look**: the palette, trails, blending, snapping grid lines to pixels, and tick labels.
 
 The two buttons at the bottom of the panel print the current settings to the console and reset
 everything to defaults. Your settings are saved in `localStorage`.

@@ -45,6 +45,7 @@ uniform int uColourMode;
 uniform int uTrailColour;
 uniform vec2 uRange;
 uniform vec3 uLowColour;
+uniform vec3 uMidColour;
 uniform vec3 uHighColour;
 
 out float vAcross;
@@ -101,7 +102,9 @@ void main() {
   float ramp = uColourMode == 0
     ? 0.0
     : clamp((value - uRange.x) / max(uRange.y - uRange.x, 1e-6), 0.0, 1.0);
-  vColour = mix(uLowColour, uHighColour, ramp);
+  vColour = ramp < 0.5
+    ? mix(uLowColour, uMidColour, ramp * 2.0)
+    : mix(uMidColour, uHighColour, ramp * 2.0 - 1.0);
 
   vec3 clip = uTransform * vec3(p, 1.0);
   vec2 offset = perp * vAcross - along * uInset;

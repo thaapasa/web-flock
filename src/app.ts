@@ -364,7 +364,6 @@ export function createApp(
       cursor: cursorOverCanvas ? cursor : null,
       cursorMode: pushing ? settings.cursor.mode : '',
       follow: settings.camera.follow,
-      style: gridLook,
       boid: { styleName: boidLook.name, count: feed.count },
       flock: flockPresetName(settings.flock),
       help: `${cameraControl.help} · ${keys.help}`,

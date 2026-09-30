@@ -28,8 +28,6 @@ export const ORIGIN_MARKER_CODES: Record<OriginMarker, number> = {
 };
 
 export interface GridStyle {
-  readonly name: string;
-
   /** CSS pixels between lines where a decade first emerges from black, at
    * weight 0. */
   readonly minPixelSpacing: number;
@@ -81,41 +79,21 @@ export interface GridStyle {
 
 const CYAN: RGB = [0.55, 0.85, 1.0];
 
-function preset(overrides: Partial<GridStyle> & { name: string }): Readonly<GridStyle> {
-  return Object.freeze({
-    minPixelSpacing: 18,
-    fadeDecades: 2,
-    fadeCurve: 'smooth',
+export const GRID_STYLE: Readonly<GridStyle> = Object.freeze({
+  minPixelSpacing: 24,
+  fadeDecades: 2,
+  fadeCurve: 'smooth',
 
-    snapLines: true,
-    lineWidth: 1,
-    lineColor: CYAN,
-    brightness: 0.55,
+  snapLines: true,
+  lineWidth: 1,
+  lineColor: CYAN,
+  brightness: 0.55,
 
-    axisBoost: 1.08,
+  axisBoost: 1.08,
 
-    origin: 'none',
-    originRadius: 4,
-    originBoost: 1.5,
+  origin: 'none',
+  originRadius: 4,
+  originBoost: 1.5,
 
-    cursorBoost: 1.15,
-
-    ...overrides,
-  } satisfies GridStyle);
-}
-
-/** Picked from the panel. Each preset after the first changes one thing. */
-export const GRID_PRESETS: readonly Readonly<GridStyle>[] = Object.freeze([
-  preset({ name: 'open', minPixelSpacing: 24 }),
-
-  preset({ name: 'even', minPixelSpacing: 18, fadeDecades: 1.7, brightness: 0.58 }),
-  preset({ name: 'rise', minPixelSpacing: 24, fadeDecades: 1.3 }),
-  preset({ name: 'strong', minPixelSpacing: 24, brightness: 0.75 }),
-  preset({ name: 'dense', minPixelSpacing: 12, brightness: 0.5 }),
-  preset({ name: 'deep', fadeDecades: 3, fadeCurve: 'late', brightness: 0.65 }),
-  preset({ name: 'flat', fadeDecades: 1, fadeCurve: 'early', brightness: 0.5 }),
-  preset({ name: 'hairline', lineWidth: 0.7, brightness: 0.8 }),
-  preset({ name: 'bold', lineWidth: 1.5, brightness: 0.45 }),
-]);
-
-export const DEFAULT_GRID_STYLE = GRID_PRESETS[0];
+  cursorBoost: 1.15,
+} satisfies GridStyle);

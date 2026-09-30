@@ -9,7 +9,7 @@ import {
 import type { BlendMode, BoidStyle } from '../render/boid-style';
 import { BOID_PRESETS, DEFAULT_BOID_STYLE } from '../render/boid-style';
 import type { GridStyle } from '../render/grid-style';
-import { DEFAULT_GRID_STYLE, GRID_PRESETS } from '../render/grid-style';
+import { GRID_STYLE } from '../render/grid-style';
 import type { LabelFormat, LabelPlacement } from '../render/overlay';
 import { DEFAULT_OVERLAY_OPTIONS, formatFramePercent } from '../render/overlay';
 import type { SimParams } from '../sim/params';
@@ -64,9 +64,7 @@ export interface LookSettings {
   blend: BlendMode;
   floorFade: number;
 
-  /** Name of a `GRID_PRESETS` entry. */
-  grid: string;
-  /** Overrides the preset's `snapLines`, so the two can be compared live. */
+  /** Overrides the grid's `snapLines`, so the two can be compared live. */
   snapLines: boolean;
   labels: LabelPlacement;
   labelFormat: LabelFormat;
@@ -107,8 +105,7 @@ export function defaultSettings(): Settings {
       trails: DEFAULT_BOID_STYLE.trail !== 'none',
       blend: DEFAULT_BOID_STYLE.blend,
       floorFade: DEFAULT_BOID_STYLE.floorFade,
-      grid: DEFAULT_GRID_STYLE.name,
-      snapLines: DEFAULT_GRID_STYLE.snapLines,
+      snapLines: GRID_STYLE.snapLines,
       labels: DEFAULT_OVERLAY_OPTIONS.placement,
       labelFormat: DEFAULT_OVERLAY_OPTIONS.format,
     },
@@ -188,20 +185,14 @@ export function boidStyle(look: LookSettings): Readonly<BoidStyle> {
   return applyLook(findPreset(BOID_PRESETS, look.boid, DEFAULT_BOID_STYLE), look);
 }
 
-/** Grid presets with the panel's override on them, cached as `boidVariants` is. */
-const gridVariants = new Map<string, Readonly<GridStyle>>();
+/** The grid with the panel's override on it, built once. */
+const flippedGrid: Readonly<GridStyle> = Object.freeze({
+  ...GRID_STYLE,
+  snapLines: !GRID_STYLE.snapLines,
+} satisfies GridStyle);
 
 export function gridStyle(look: LookSettings): Readonly<GridStyle> {
-  const base = findPreset(GRID_PRESETS, look.grid, DEFAULT_GRID_STYLE);
-  if (base.snapLines === look.snapLines) return base;
-
-  const key = `${base.name}|${look.snapLines}`;
-  let variant = gridVariants.get(key);
-  if (!variant) {
-    variant = Object.freeze({ ...base, snapLines: look.snapLines } satisfies GridStyle);
-    gridVariants.set(key, variant);
-  }
-  return variant;
+  return look.snapLines === GRID_STYLE.snapLines ? GRID_STYLE : flippedGrid;
 }
 
 /**
@@ -275,11 +266,6 @@ export function parse(text: string | null): Settings {
       BOID_PRESETS.map((preset) => preset.name),
       settings.look.boid,
     );
-    settings.look.grid = oneOf(
-      look.grid,
-      GRID_PRESETS.map((preset) => preset.name),
-      settings.look.grid,
-    );
     settings.look.snapLines = bool(look.snapLines, settings.look.snapLines);
     settings.look.trails = bool(look.trails, settings.look.trails);
     settings.look.blend = oneOf(look.blend, ['additive', 'alpha'] as const, settings.look.blend);
@@ -332,7 +318,7 @@ export function exportLiteral(settings: Settings): string {
   const { camera, look } = settings;
   return [
     '// web-flock parameters',
-    `// look ${look.boid} on ${look.grid} · trails ${look.trails ? 'on' : 'off'} · ${look.blend}`,
+    `// look ${look.boid} · trails ${look.trails ? 'on' : 'off'} · ${look.blend}`,
     camera.follow
       ? `// follow on · frame ${formatFramePercent(camera.frameLog)} · cursor ${settings.cursor.mode}`
       : `// follow off · zoom ${(10 ** camera.logScale).toPrecision(3)} px/u` +

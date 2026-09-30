@@ -2,7 +2,6 @@ import type { Camera } from '../camera/camera';
 import type { Vec2 } from '../math/types';
 import { createResizingCanvas } from './canvas';
 import type { FrameStats } from './frame-stats';
-import type { GridStyle } from './grid-style';
 
 /**
  * The text layer: tick labels and the readouts, drawn with the 2D context on a
@@ -55,7 +54,6 @@ export interface OverlayFrame {
    */
   cursorMode: string;
   follow: boolean;
-  style: Readonly<GridStyle>;
   /** Null when nothing is drawing boids, which hides the line. */
   boid: BoidReadout | null;
   /** Which flock preset the rules are on. Empty hides the line. */
@@ -179,7 +177,6 @@ export function createOverlay(
       `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}` +
         `${frame.follow ? ' · follow' : ' · free'}`,
       `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
-      `style   ${frame.style.name}`,
       ...(frame.boid ? [`boid    ${frame.boid.styleName}`] : []),
       ...(frame.flock ? [`flock   ${frame.flock}`] : []),
     ];

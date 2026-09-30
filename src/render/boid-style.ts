@@ -37,36 +37,44 @@ export const TRAIL_COLOUR_CODES: Record<TrailColour, number> = {
 export type BlendMode = 'additive' | 'alpha';
 
 /**
- * The colour schemes, `[low, high]` each. Low is a slow or lonely boid, and on
- * a black background it doubles as the dim end, so no scheme starts at a
- * saturated mid-brightness colour.
+ * The colour schemes, `[low, mid, high]` each. Low is a slow or lonely boid.
+ *
+ * The middle stop keeps the ramp saturated. A straight mix between two
+ * distant hues passes through grey halfway, which is where most of the flock
+ * sits.
  */
 export const COLOUR_RAMPS = {
-  ice: [
-    [0.16, 0.34, 0.78],
-    [0.82, 0.97, 1.0],
-  ],
-  amber: [
-    [0.35, 0.72, 1.0],
-    [1.0, 0.8, 0.42],
-  ],
-  mono: [
-    [0.16, 0.4, 0.54],
-    [0.72, 0.96, 1.0],
-  ],
-  ember: [
-    [0.6, 0.14, 0.1],
-    [1.0, 0.9, 0.55],
-  ],
   signal: [
     [0.26, 0.86, 1.0],
+    [0.62, 0.42, 1.0],
     [1.0, 0.3, 0.42],
   ],
-  flux: [
-    [0.1, 0.26, 0.62],
-    [0.74, 0.96, 0.36],
+  teal: [
+    [0.16, 0.4, 0.54],
+    [0.3, 0.78, 0.92],
+    [0.62, 1.0, 0.55],
   ],
-} as const satisfies Record<string, readonly [RGB, RGB]>;
+  ember: [
+    [0.5, 0.1, 0.12],
+    [1.0, 0.42, 0.12],
+    [1.0, 0.88, 0.45],
+  ],
+  plasma: [
+    [0.32, 0.1, 0.75],
+    [0.92, 0.25, 0.6],
+    [1.0, 0.78, 0.3],
+  ],
+  aurora: [
+    [0.06, 0.36, 0.26],
+    [0.2, 0.92, 0.55],
+    [0.82, 0.5, 1.0],
+  ],
+  reef: [
+    [0.12, 0.2, 0.7],
+    [0.2, 0.8, 0.95],
+    [1.0, 0.45, 0.75],
+  ],
+} as const satisfies Record<string, readonly [RGB, RGB, RGB]>;
 
 export type ColourRamp = keyof typeof COLOUR_RAMPS;
 
@@ -97,6 +105,8 @@ export interface BoidStyle {
   readonly colourBy: ColourInput;
   /** The colour at the bottom of the ramp, and the whole colour when `flat`. */
   readonly lowColor: RGB;
+  /** The colour halfway along the ramp. */
+  readonly midColor: RGB;
   readonly highColor: RGB;
   /**
    * Where the ramp starts and ends within the flock's live speed band, as
@@ -132,7 +142,7 @@ function preset(
   overrides: Partial<BoidStyle> & { name: string; ramp?: ColourRamp },
 ): Readonly<BoidStyle> {
   const { ramp = 'signal', ...rest } = overrides;
-  const [lowColor, highColor] = COLOUR_RAMPS[ramp];
+  const [lowColor, midColor, highColor] = COLOUR_RAMPS[ramp];
   return Object.freeze({
     size: 5,
     minScreenSize: 3.5,
@@ -142,6 +152,7 @@ function preset(
 
     colourBy: 'speed',
     lowColor,
+    midColor,
     highColor,
     speedRange: [0, 1],
     densityRange: [0, 1],
@@ -161,21 +172,15 @@ function preset(
   } satisfies BoidStyle);
 }
 
-/** Bound to shift and a number key. Each preset after the first changes one
- * thing. */
+/** Bound to shift and a number key. */
 export const BOID_PRESETS: readonly Readonly<BoidStyle>[] = Object.freeze([
   preset({ name: 'signal', ramp: 'signal' }),
-
-  preset({ name: 'ice', ramp: 'ice' }),
-  preset({ name: 'amber', ramp: 'amber' }),
-  preset({ name: 'mono', ramp: 'mono' }),
-  preset({ name: 'ember', ramp: 'ember' }),
-  preset({ name: 'flux', ramp: 'flux' }),
-
   preset({ name: 'swarm', ramp: 'signal', colourBy: 'density' }),
-  preset({ name: 'press', ramp: 'mono', colourBy: 'density' }),
-
-  preset({ name: 'short', trailPoints: 12 }),
+  preset({ name: 'teal', ramp: 'teal' }),
+  preset({ name: 'aurora', ramp: 'aurora', colourBy: 'density' }),
+  preset({ name: 'ember', ramp: 'ember', colourBy: 'density' }),
+  preset({ name: 'plasma', ramp: 'plasma', colourBy: 'density' }),
+  preset({ name: 'reef', ramp: 'reef', colourBy: 'density' }),
 ]);
 
 export const DEFAULT_BOID_STYLE = BOID_PRESETS[0];

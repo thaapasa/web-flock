@@ -11,7 +11,7 @@ import {
   MAX_BANDS,
 } from './grid-bands';
 import type { GridStyle } from './grid-style';
-import { DEFAULT_GRID_STYLE, GRID_PRESETS } from './grid-style';
+import { GRID_STYLE } from './grid-style';
 
 /** log10(CSS pixels per world unit), swept across the range the wheel covers. */
 function zoomSweep(step: number): number[] {
@@ -23,10 +23,21 @@ function zoomSweep(step: number): number[] {
 /** World coordinates of lines belonging to a spread of different decades. */
 const SAMPLE_LINES = [0.01, 0.1, 1, 5, 10, 100, 300, 1000, 10000, 1e5, 1e6, 123000];
 
-const PRESET_CASES = GRID_PRESETS.map((style) => [style.name, style] as const);
+/**
+ * The grid in use, and variants that stretch each setting the band maths
+ * depends on. The invariants have to hold for all of them, not only for the
+ * values the grid happens to use.
+ */
+const STYLE_CASES: readonly (readonly [string, GridStyle])[] = [
+  ['grid', GRID_STYLE],
+  ['dense', { ...GRID_STYLE, minPixelSpacing: 12 }],
+  ['short fade', { ...GRID_STYLE, fadeDecades: 1, fadeCurve: 'early' }],
+  ['long fade', { ...GRID_STYLE, fadeDecades: 3, fadeCurve: 'late' }],
+  ['uneven fade', { ...GRID_STYLE, fadeDecades: 1.3, fadeCurve: 'linear' }],
+];
 
 describe('band selection', () => {
-  it.each(PRESET_CASES)('holds its invariants across the zoom range (%s)', (_name, style) => {
+  it.each(STYLE_CASES)('holds its invariants across the zoom range (%s)', (_name, style) => {
     const bands = createBands();
     for (const logScale of zoomSweep(0.01)) {
       const count = computeBands(10 ** logScale, style, bands);
@@ -50,9 +61,9 @@ describe('band selection', () => {
 
   it('admits a decade only once its lines are far enough apart', () => {
     const bands = createBands();
-    const { minPixelSpacing } = DEFAULT_GRID_STYLE;
+    const { minPixelSpacing } = GRID_STYLE;
     for (const logScale of zoomSweep(0.013)) {
-      computeBands(10 ** logScale, DEFAULT_GRID_STYLE, bands);
+      computeBands(10 ** logScale, GRID_STYLE, bands);
       expect(bands[0].spacing).toBeGreaterThanOrEqual(minPixelSpacing - 1e-9);
       expect(bands[0].spacing).toBeLessThan(minPixelSpacing * 10 + 1e-9);
     }
@@ -65,7 +76,7 @@ describe('band selection', () => {
 
   it('saturates at the top band, so the decade above it draws the same', () => {
     const bands = createBands();
-    for (const style of GRID_PRESETS) {
+    for (const [, style] of STYLE_CASES) {
       for (const logScale of zoomSweep(0.017)) {
         const count = computeBands(10 ** logScale, style, bands);
         expect(bands[count - 1].weight).toBe(1);
@@ -88,7 +99,7 @@ describe('handover continuity', () => {
    * decades of zoom, and the jump has to stay far below what an eye reads as
    * an edge.
    */
-  it.each(PRESET_CASES)('moves no line brightness abruptly (%s)', (_name, style: GridStyle) => {
+  it.each(STYLE_CASES)('moves no line brightness abruptly (%s)', (_name, style: GridStyle) => {
     const bands = createBands();
     const brightness = (logScale: number, value: number): number => {
       const count = computeBands(10 ** logScale, style, bands);
@@ -112,7 +123,7 @@ describe('handover continuity', () => {
    * retuning a style by eye cannot make it wrong. What it forbids is a coarse
    * line dipping as a finer decade appears under it, which reads as flicker.
    */
-  it.each(PRESET_CASES)('never dims a line as it gains room (%s)', (_name, style: GridStyle) => {
+  it.each(STYLE_CASES)('never dims a line as it gains room (%s)', (_name, style: GridStyle) => {
     const bands = createBands();
     for (const value of SAMPLE_LINES) {
       let previous = 0;
@@ -129,7 +140,7 @@ describe('handover continuity', () => {
     const bands = createBands();
     // Its own style rather than the default: the structure asserted below
     // should not move when the default is retuned by eye.
-    const count = computeBands(1, { ...DEFAULT_GRID_STYLE, minPixelSpacing: 9 }, bands);
+    const count = computeBands(1, { ...GRID_STYLE, minPixelSpacing: 9 }, bands);
     // At 1 px per unit with a 9 px minimum, the decades on screen start at 1.
     expect(bands[0].exponent).toBe(1);
     expect(lineBrightness(10, bands, count)).toBe(bands[0].weight);
@@ -172,7 +183,7 @@ describe('axis weight', () => {
   /** CSS pixels of the shorter side, from a phone to a large desktop. */
   const VIEWPORTS = [600, 1000, 1800, 3000];
 
-  it.each(PRESET_CASES)('moves continuously as the zoom sweeps (%s)', (_name, style) => {
+  it.each(STYLE_CASES)('moves continuously as the zoom sweeps (%s)', (_name, style) => {
     const bands = createBands();
     for (const viewport of VIEWPORTS) {
       let previous: number | null = null;
@@ -194,7 +205,7 @@ describe('axis weight', () => {
     const bands = createBands();
     for (const viewport of VIEWPORTS) {
       for (const logScale of zoomSweep(0.013)) {
-        const count = computeBands(10 ** logScale, DEFAULT_GRID_STYLE, bands);
+        const count = computeBands(10 ** logScale, GRID_STYLE, bands);
         const weight = axisWeight(bands, count, viewport);
         for (let i = 0; i < count; i++) {
           if (bands[i].spacing * 10 ** 0.5 <= viewport) {
@@ -207,7 +218,7 @@ describe('axis weight', () => {
 
   it('gives the axes nothing when no decade fits the viewport', () => {
     const bands = createBands();
-    const count = computeBands(1, DEFAULT_GRID_STYLE, bands);
+    const count = computeBands(1, GRID_STYLE, bands);
     expect(axisWeight(bands, count, 1)).toBe(0);
   });
 });

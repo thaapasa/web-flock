@@ -26,6 +26,7 @@ uniform float uPad;
 uniform int uColourMode;
 uniform vec2 uRange;
 uniform vec3 uLowColour;
+uniform vec3 uMidColour;
 uniform vec3 uHighColour;
 
 out vec2 vLocal;
@@ -48,7 +49,9 @@ void main() {
   float t = uColourMode == 0
     ? 0.0
     : clamp((value - uRange.x) / max(uRange.y - uRange.x, 1e-6), 0.0, 1.0);
-  vColour = mix(uLowColour, uHighColour, t);
+  vColour = t < 0.5
+    ? mix(uLowColour, uMidColour, t * 2.0)
+    : mix(uMidColour, uHighColour, t * 2.0 - 1.0);
 
   // The position goes through the matrix, the shape is added after it in
   // pixels. Shaping in world units and scaling would tie stroke width to zoom.

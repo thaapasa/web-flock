@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
 import { BOID_PRESETS } from '../render/boid-style';
-import { GRID_PRESETS } from '../render/grid-style';
+import { GRID_STYLE } from '../render/grid-style';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 import { FLOCK_PRESETS } from '../sim/presets';
@@ -115,9 +115,8 @@ describe('parse', () => {
   });
 
   it('falls back when a preset name no longer exists', () => {
-    const settings = parse(stored({ look: { boid: 'gone', grid: 'also gone' } }));
+    const settings = parse(stored({ look: { boid: 'gone' } }));
     expect(settings.look.boid).toBe(defaultSettings().look.boid);
-    expect(settings.look.grid).toBe(defaultSettings().look.grid);
   });
 
   it('keeps a preset name that does exist', () => {
@@ -274,18 +273,18 @@ describe('cloneSettings', () => {
 });
 
 describe('gridStyle', () => {
-  it('returns the preset itself when the override agrees with it', () => {
+  it('returns the grid itself when the override agrees with it', () => {
     const look = defaultSettings().look;
-    expect(gridStyle(look)).toBe(GRID_PRESETS[0]);
+    expect(gridStyle(look)).toBe(GRID_STYLE);
   });
 
-  it('overrides the preset and caches the result', () => {
+  it('overrides the grid and caches the result', () => {
     const look = defaultSettings().look;
-    look.snapLines = !GRID_PRESETS[0].snapLines;
+    look.snapLines = !GRID_STYLE.snapLines;
 
     const style = gridStyle(look);
     expect(style.snapLines).toBe(look.snapLines);
-    expect(style.name).toBe(GRID_PRESETS[0].name);
+    expect(style.lineWidth).toBe(GRID_STYLE.lineWidth);
     expect(gridStyle(look)).toBe(style);
   });
 });
