@@ -13,7 +13,7 @@ import { BOID_PRESETS } from '../render/boid-style';
 import { GRID_PRESETS } from '../render/grid-style';
 import { formatFramePercent, formatScale } from '../render/overlay';
 import type { Settings } from './settings';
-import { cloneSettings, copyInto, CURSOR_MODES, STEP_RATES } from './settings';
+import { cloneSettings, copyInto, CURSOR_MODES, flockPresetName, STEP_RATES } from './settings';
 
 /** Degrees, for an angle the simulation keeps in radians. */
 const DEGREES = (value: number): string => `${((value * 180) / Math.PI).toFixed(0)}°`;
@@ -73,87 +73,108 @@ export function createPanel(options: PanelOptions): Panel {
   const { container, settings, capacity, hooks } = options;
   const { flock, clock, cursor, camera, look } = settings;
 
-  const pane = new Pane({ container, title: 'web-flock', expanded: false });
+  const pane = new Pane({ container, title: 'Flock', expanded: false });
 
-  const flockFolder: FolderApi = pane.addFolder({ title: 'flock', expanded: true });
-  flockFolder.addBinding(flock, 'count', { min: 0, max: capacity, step: 10 });
-  flockFolder.addBinding(flock, 'contactDistance', {
+  const simulationFolder: FolderApi = pane.addFolder({ title: 'simulation', expanded: true });
+  simulationFolder.addBinding(flock, 'count', { min: 0, max: capacity, step: 10 });
+  simulationFolder.addBinding(flock, 'contactDistance', {
     label: 'contact',
     min: 0,
     max: 20,
     step: 0.5,
   });
-  flockFolder.addBinding(flock, 'crowdPressure', {
+  simulationFolder.addBinding(flock, 'crowdPressure', {
     label: 'pressure',
     min: 0,
     max: 8,
     step: 0.1,
   });
-  flockFolder.addBinding(flock, 'separationRadius', {
+  // What a flock preset sets, titled with the preset it matches.
+  const behaviourFolder = pane.addFolder({ title: '', expanded: true });
+  const showPresetName = (): void => {
+    behaviourFolder.title = `behaviour: ${flockPresetName(flock)}`;
+  };
+  showPresetName();
+  behaviourFolder.addBinding(flock, 'separationRadius', {
     label: 'separation r',
     min: 0,
     max: 40,
     step: 0.5,
   });
-  flockFolder.addBinding(flock, 'neighbourRadius', {
+  behaviourFolder.addBinding(flock, 'neighbourRadius', {
     label: 'neighbour r',
     min: 2,
     max: 60,
     step: 0.5,
   });
-  flockFolder.addBinding(flock, 'fieldOfView', {
+  behaviourFolder.addBinding(flock, 'fieldOfView', {
     label: 'half fov',
     min: 0,
     max: Math.PI,
     step: 0.01,
     format: DEGREES,
   });
-  flockFolder.addBinding(flock, 'separationWeight', {
+  behaviourFolder.addBinding(flock, 'separationWeight', {
     label: 'separation',
     min: 0,
     max: 3,
     step: 0.01,
   });
-  flockFolder.addBinding(flock, 'alignmentWeight', {
+  behaviourFolder.addBinding(flock, 'alignmentWeight', {
     label: 'alignment',
     min: 0,
     max: 3,
     step: 0.01,
   });
-  flockFolder.addBinding(flock, 'cohesionWeight', {
+  behaviourFolder.addBinding(flock, 'cohesionWeight', {
     label: 'cohesion',
     min: 0,
     max: 3,
     step: 0.01,
   });
-  flockFolder.addBinding(flock, 'maxForce', { label: 'max force', min: 0, max: 320, step: 1 });
+  behaviourFolder.addBinding(flock, 'maxForce', { label: 'max force', min: 0, max: 320, step: 1 });
   // The top of this one is 0.05 rather than 0.2: past it the pull overpowers
   // the rules and the flock is a ball on a string.
-  flockFolder.addBinding(flock, 'originPull', {
+  behaviourFolder.addBinding(flock, 'originPull', {
     label: 'origin pull',
     min: 0,
     max: 0.05,
     step: 0.0005,
     format: (value: number) => value.toFixed(4),
   });
-  flockFolder.addBinding(flock, 'minSpeed', { label: 'min speed', min: 0, max: 120, step: 1 });
-  flockFolder.addBinding(flock, 'maxSpeed', { label: 'max speed', min: 0, max: 180, step: 1 });
-  flockFolder.addBinding(flock, 'maxTurnRate', {
+  behaviourFolder.addBinding(flock, 'minSpeed', { label: 'min speed', min: 0, max: 120, step: 1 });
+  behaviourFolder.addBinding(flock, 'maxSpeed', { label: 'max speed', min: 0, max: 180, step: 1 });
+  behaviourFolder.addBinding(flock, 'maxTurnRate', {
     label: 'turn rate',
     min: 0,
     max: Math.PI * 3,
     step: 0.01,
     format: (value: number) => `${DEGREES(value)}/s`,
   });
-  flockFolder.addBinding(flock, 'wanderStrength', { label: 'wander', min: 0, max: 30, step: 0.1 });
-  flockFolder.addBinding(flock, 'wanderRate', { label: 'wander rate', min: 0, max: 8, step: 0.1 });
+  behaviourFolder.addBinding(flock, 'wanderStrength', {
+    label: 'wander',
+    min: 0,
+    max: 30,
+    step: 0.1,
+  });
+  behaviourFolder.addBinding(flock, 'wanderRate', {
+    label: 'wander rate',
+    min: 0,
+    max: 8,
+    step: 0.1,
+  });
 
-  flockFolder.addBinding(clock, 'stepRate', {
+  simulationFolder.addBinding(clock, 'stepRate', {
     label: 'step rate',
     options: Object.fromEntries(STEP_RATES.map((rate) => [`${rate} Hz`, rate])),
   });
-  flockFolder.addBinding(flock, 'spawnRadius', { label: 'spawn r', min: 10, max: 2000, step: 10 });
-  flockFolder.addButton({ title: 'restart' }).on('click', () => {
+  simulationFolder.addBinding(flock, 'spawnRadius', {
+    label: 'spawn r',
+    min: 10,
+    max: 2000,
+    step: 10,
+  });
+  simulationFolder.addButton({ title: 'restart' }).on('click', () => {
     hooks.restart();
   });
 
@@ -228,6 +249,7 @@ export function createPanel(options: PanelOptions): Panel {
 
   pane.on('change', (event) => {
     showCameraMode();
+    showPresetName();
     hooks.apply(event.last);
   });
 
@@ -241,6 +263,7 @@ export function createPanel(options: PanelOptions): Panel {
     pane.refresh();
     copyInto(settings, before);
     showCameraMode();
+    showPresetName();
   };
 
   return {

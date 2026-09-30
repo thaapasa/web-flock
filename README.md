@@ -31,11 +31,13 @@ as it is committed. To change the published page, run `yarn site` and commit the
 
 ### Parameter panel
 
-Every change in the panel takes effect immediately. The panel has four sections:
+Every change in the panel takes effect immediately. The panel has five sections:
 
-- **flock**: the boid count, the contact distance, the crowd pressure, the rule weights and their
-  radii, the field of view, the speed and turn limits, the pull toward the origin, wander, the step
-  rate, and the spawn radius. The `restart` button next to the spawn radius starts the flock again.
+- **simulation**: the boid count, the contact distance, the crowd pressure, the step rate and the
+  spawn radius. The `restart` button next to the spawn radius starts the flock again.
+- **behaviour**: the settings that a flock preset sets. These are the rule weights and their radii,
+  the field of view, the speed and turn limits, the pull toward the origin, and wander. The title
+  shows which preset they match, or `custom` if they match none.
 - **cursor**: makes the cursor a predator, an attractor or nothing. It has a strength and a reach.
   The reach is drawn as a ring around the cursor.
 - **camera**: follow, the zoom, and a button that fits the flock on screen.
