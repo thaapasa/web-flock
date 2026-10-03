@@ -12,15 +12,18 @@ import {
 } from './framing';
 
 /**
- * Follow owns the centre and the zoom together, and only the user turns it off.
- * With it off, the zoom is a plain number and the pointer drags the centre.
+ * Follow owns the centre and the zoom together, and only the user turns it off:
+ * from the panel, with the follow key, or by dragging the view. With it off,
+ * the zoom is a plain number and the pointer drags the centre.
  *
  * While following, the zoom you set is a fraction of the flock's size rather
  * than an absolute scale, so the camera keeps that framing as the flock
  * breathes.
  *
  * The centre chases the flock outright, because a centroid of hundreds of boids
- * barely jitters. The zoom cannot: the flock's reach moves every step, and a
+ * barely jitters. Turning follow on eases the centre over to the flock rather
+ * than jumping there, but once it arrives it tracks the flock exactly. The zoom
+ * cannot: the flock's reach moves every step, and a
  * zoom that answered it would hunt, dragging the grid's decades in and out with
  * it. So it follows through a deadband and a time constant, and only when it
  * must.
@@ -31,6 +34,15 @@ const WHEEL_SENSITIVITY = 0.0016;
 
 /** Decades per keypress. Small enough to walk through a grid decade handover. */
 const KEY_ZOOM_STEP = 0.05;
+
+/**
+ * How far, in CSS pixels, the pointer has to move before a drag turns follow
+ * off, so that a click with a slight wobble leaves it on.
+ */
+const DRAG_THRESHOLD = 4;
+
+/** Time constant, in seconds, of the centre's move to the flock when follow turns on. */
+const CENTRE_TAU = 0.5;
 
 /**
  * How much lazier the zoom is on the way in than on the way out, in deadband
@@ -45,8 +57,8 @@ export interface CameraControlOptions {
   settings: CameraSettings;
   /** The flock to frame. An accessor because the active scene can change. */
   sample: () => FlockSample;
-  /** The wheel writes to `settings`; this lets the panel catch up. */
-  onZoomChanged: () => void;
+  /** The wheel, the follow key and a drag write to `settings`; this lets the panel catch up. */
+  onChanged: () => void;
   /** Whether the pointer and keys currently belong to the camera. */
   active: () => boolean;
 }
@@ -68,7 +80,7 @@ export function createCameraControl(
   camera: Camera,
   options: CameraControlOptions,
 ): CameraControl {
-  const { settings, sample, onZoomChanged, active } = options;
+  const { settings, sample, onChanged, active } = options;
 
   /** Grown as needed and reused, so a fit allocates nothing. */
   let radii = new Float64Array(256);
@@ -83,6 +95,15 @@ export function createCameraControl(
   let frameLog = settings.frameLog;
   /** Cleared after the first following frame, so the page opens framed rather than gliding in. */
   let snap = settings.follow;
+  /**
+   * How far the centre still is from the flock's centroid. It decays to zero
+   * rather than the centre easing toward the centroid, so a migrating flock
+   * is not left trailing a constant lag behind the camera.
+   */
+  let offsetX = 0;
+  let offsetY = 0;
+  /** Set when follow turns on, so the next flock sample measures the offset to ease out. */
+  let easeIn = false;
 
   /**
    * Moves the live zoom with a change to the framing, whether it came from the
@@ -95,15 +116,21 @@ export function createCameraControl(
     frameLog = settings.frameLog;
   };
 
-  const zoomBy = (decades: number): void => {
+  /**
+   * With follow off, the zoom keeps the world point under `anchor` in place, or
+   * the centre of the screen when there is no anchor. With follow on, the
+   * camera stays centred on the flock and the anchor does nothing.
+   */
+  const zoomBy = (decades: number, anchor?: { x: number; y: number }): void => {
     if (settings.follow) {
       // Zooming in shows less of the flock, so the fraction moves the other way.
       settings.frameLog = stepFrame(settings.frameLog, -decades);
       syncFrame();
     } else {
       settings.logScale = stepZoom(settings.logScale, decades);
+      if (anchor) camera.zoomAt(anchor.x, anchor.y, settings.logScale);
     }
-    onZoomChanged();
+    onChanged();
   };
 
   const onWheel = (event: WheelEvent): void => {
@@ -112,24 +139,46 @@ export function createCameraControl(
     // deltaMode 0 is pixels, 1 is lines, 2 is pages. A trackpad sends pixels and
     // a mouse wheel sends lines, so without this the mouse would barely move.
     const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1;
-    zoomBy(-event.deltaY * scale * WHEEL_SENSITIVITY);
+    const rect = target.getBoundingClientRect();
+    zoomBy(-event.deltaY * scale * WHEEL_SENSITIVITY, {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  };
+
+  /**
+   * Hands the zoom over at once rather than on the next frame, so the panel
+   * shows the zoom the camera is at.
+   */
+  const setFollow = (on: boolean): void => {
+    if (settings.follow === on) return;
+    settings.follow = on;
+    if (!on) settings.logScale = live;
+    onChanged();
   };
 
   let dragging = 0;
+  let startX = 0;
+  let startY = 0;
   let lastX = 0;
   let lastY = 0;
 
   const onPointerDown = (event: PointerEvent): void => {
-    // Follow owns the centre, so a drag would be a tug of war the frame loop wins.
-    if (event.button !== 0 || settings.follow || !active()) return;
+    if (event.button !== 0 || !active()) return;
     dragging = event.pointerId;
-    lastX = event.clientX;
-    lastY = event.clientY;
+    startX = lastX = event.clientX;
+    startY = lastY = event.clientY;
     target.setPointerCapture(event.pointerId);
   };
 
   const onPointerMove = (event: PointerEvent): void => {
     if (dragging !== event.pointerId) return;
+    if (settings.follow) {
+      const moved = Math.hypot(event.clientX - startX, event.clientY - startY);
+      if (moved < DRAG_THRESHOLD) return;
+      // Follow owns the centre, so the drag would lose to the frame loop.
+      setFollow(false);
+    }
     const perPixel = camera.worldPerPixel;
     // Drag the world, not the camera, so the ground follows the pointer. Screen y
     // runs down, which flips that sign.
@@ -153,6 +202,8 @@ export function createCameraControl(
     if (flock.count > radii.length) radii = new Float64Array(flock.count);
 
     camera.setCenter(flock.centroid.x, flock.centroid.y);
+    offsetX = offsetY = 0;
+    easeIn = false;
     live = fitLogScale(
       flockReach(flock, FRAME_QUANTILE, radii),
       camera.viewportWidth,
@@ -165,7 +216,7 @@ export function createCameraControl(
     } else {
       settings.logScale = live;
     }
-    onZoomChanged();
+    onChanged();
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -174,6 +225,9 @@ export function createCameraControl(
     switch (event.key) {
       case 'z':
         frameFlock();
+        break;
+      case 'f':
+        setFollow(!settings.follow);
         break;
       case '+':
       case '=':
@@ -203,15 +257,26 @@ export function createCameraControl(
         // while following is the one the plain zoom starts from.
         if (!following) {
           settings.logScale = live;
-          onZoomChanged();
+          onChanged();
         }
+        easeIn = following;
       }
 
       if (following) {
         syncFrame();
         const flock = sample();
         if (flock.count > 0) {
-          camera.setCenter(flock.centroid.x, flock.centroid.y);
+          const { centroid } = flock;
+          if (easeIn) {
+            offsetX = camera.center.x - centroid.x;
+            offsetY = camera.center.y - centroid.y;
+            easeIn = false;
+          }
+          // Exact for any dt, like the zoom, so the glide takes the same time at any framerate.
+          const decay = Math.exp(-dt / CENTRE_TAU);
+          offsetX *= decay;
+          offsetY *= decay;
+          camera.setCenter(centroid.x + offsetX, centroid.y + offsetY);
           if (flock.count > radii.length) radii = new Float64Array(flock.count);
 
           const wanted = followLogScale(
@@ -243,9 +308,7 @@ export function createCameraControl(
 
     frameFlock,
 
-    get help() {
-      return settings.follow ? 'wheel zoom · z frame' : 'wheel zoom · drag pan · z frame';
-    },
+    help: 'wheel zoom · drag pan · f follow · z frame',
 
     dispose(): void {
       target.removeEventListener('wheel', onWheel);

@@ -67,8 +67,9 @@ With follow off, the zoom is a plain scale that you set yourself.
 
 | Input                | Action                                          |
 | -------------------- | ----------------------------------------------- |
-| Wheel                | Zoom                                            |
-| Drag                 | Pan, when follow is off                         |
+| Wheel                | Zoom, around the pointer when follow is off     |
+| Drag                 | Pan, and turn follow off                        |
+| `f`                  | Turn follow on or off                           |
 | `z`                  | Fit the flock on screen                         |
 | `+` / `-`            | Zoom in or out by a small step                  |
 | Number key           | Choose a flock preset from `src/sim/presets.ts` |

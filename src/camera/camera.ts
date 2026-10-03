@@ -91,6 +91,20 @@ export class Camera {
     this.logScale = this._logScale + decades;
   }
 
+  /**
+   * Sets the zoom and moves the centre so that the world point under the given
+   * screen point stays under it.
+   */
+  zoomAt(screenX: number, screenY: number, logScale: number): void {
+    const anchorX = this.center.x + (screenX - this._viewportWidth / 2) / this._scale;
+    const anchorY = this.center.y - (screenY - this._viewportHeight / 2) / this._scale;
+    this.logScale = logScale;
+    this.setCenter(
+      anchorX - (screenX - this._viewportWidth / 2) / this._scale,
+      anchorY + (screenY - this._viewportHeight / 2) / this._scale,
+    );
+  }
+
   /** Screen coordinates are CSS pixels from the top-left, +y down. */
   worldToScreen(worldX: number, worldY: number, out: Vec2 = { x: 0, y: 0 }): Vec2 {
     out.x = (worldX - this.center.x) * this._scale + this._viewportWidth / 2;

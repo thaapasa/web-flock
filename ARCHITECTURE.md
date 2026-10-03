@@ -199,9 +199,14 @@ out per decade.
 ### Following the flock
 
 With follow on, the camera centres on the flock every frame and sets the zoom from the flock's size.
-With follow off, dragging the pointer moves the centre, and the zoom stays where the user set it.
+With follow off, dragging the pointer moves the centre, and the zoom stays where the user set it. A
+drag that starts with follow on turns it off once the pointer has moved a few pixels, so a click
+does not turn it off.
 
-The centre is not smoothed, because the centroid of hundreds of boids barely moves between frames.
+While following, the centre is not smoothed, because the centroid of hundreds of boids barely moves
+between frames. When follow turns on, the camera starts from where it was and moves over to the
+flock in about a second. It does this by shrinking its offset from the centroid, not by trailing the
+centroid, so once it arrives it tracks the flock exactly.
 
 The zoom is smoothed. The flock's size changes every step, and a zoom that followed it directly
 would keep oscillating. The grid's decades would then fade in and out, and a correct grid would look

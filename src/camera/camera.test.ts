@@ -43,6 +43,24 @@ describe('Camera', () => {
     }
   });
 
+  it('keeps the world point under the anchor in place when zooming at it', () => {
+    const c = camera();
+    const before = c.screenToWorld(130, 470);
+
+    c.zoomAt(130, 470, 1.7);
+    expect(c.logScale).toBe(1.7);
+    const after = c.screenToWorld(130, 470);
+    expect(after.x).toBeCloseTo(before.x, 6);
+    expect(after.y).toBeCloseTo(before.y, 6);
+  });
+
+  it('leaves the centre alone when zooming at the middle of the viewport', () => {
+    const c = camera();
+    c.zoomAt(400, 300, -1);
+    expect(c.center.x).toBeCloseTo(120);
+    expect(c.center.y).toBeCloseTo(-40);
+  });
+
   it('puts the camera centre at the middle of the viewport', () => {
     const c = camera();
     const screen = c.worldToScreen(c.center.x, c.center.y);

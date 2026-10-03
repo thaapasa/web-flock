@@ -200,7 +200,7 @@ export function createApp(
   const cameraControl: CameraControl = createCameraControl(sceneElement, camera, {
     settings: settings.camera,
     sample: () => simulation.sample,
-    onZoomChanged: () => {
+    onChanged: () => {
       panel?.refresh();
       scheduleSave();
     },
