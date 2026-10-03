@@ -79,10 +79,8 @@ With follow off, the zoom is a plain scale that you set yourself.
 The readout shows the name of the current flock preset and palette. When you move a slider, it shows
 `custom` instead.
 
-The `p` and `P` keys are temporary. They will be removed together with `src/dev/`.
-
 ## Related documentation
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): how the code fits together.
-- [PLAN.md](PLAN.md): what is done and what is left.
+- [IDEAS.md](IDEAS.md): known problems and ideas for what could come next.
 - [CLAUDE.md](CLAUDE.md): the visual and technical direction.

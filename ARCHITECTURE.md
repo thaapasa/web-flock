@@ -19,7 +19,7 @@ The page has three layers:
 - `src/render`: the GL wrapper, the grid, the boids, the text layer and the shaders.
 - `src/camera`: the transform between world and screen, and the controls that move the camera.
 - `src/ui`: the settings, the panel that edits them, and saving them.
-- `src/dev`: a temporary log of frame times.
+- `src/dev`: a log of frame-time readings, for measuring performance on a new machine.
 
 ## Frame loop
 
@@ -74,7 +74,10 @@ the flock is pulled tight. Both look like a regular lattice.
 Setting `crowdPressure` above 0 replaces the rule with one whose push starts at zero at the
 separation radius, grows as boids get closer, and adds up over all close neighbours. It is not
 limited by the force cap. The spacing then spreads out between the contact distance and the
-separation radius. At 0 the flock is the same as without the setting.
+separation radius.
+
+The default is 8. At 0 the classic rule is used. No flock preset sets it, so choosing a preset
+leaves it as it is.
 
 ### Summaries for other modules
 
@@ -157,13 +160,34 @@ Both boid shaders output premultiplied colour. The source blend factor is then `
 modes, and only the destination factor differs between additive and alpha blending. One shader
 serves both modes.
 
+### Glow
+
+Glow is a soft halo that the boid and trail shaders add around each stroke. There is no separate
+pass. With glow on, each chevron's quad and each trail ribbon grows by three glow radii on every
+side, which is where the halo has faded to about 5%.
+
+The glow radius is in world units, so the halo keeps its size relative to the mark at any zoom. It
+stops shrinking where the mark does, at the minimum screen size.
+
+The cost is in pixels, not in boids. The halo's area grows with the square of the zoom, so the worst
+case is zooming in close to a dense flock. At glow 0 the quads keep their size and the shaders skip
+the halo, so glow costs nothing. [IDEAS.md](IDEAS.md) describes a bloom pass whose cost would not
+depend on the zoom.
+
 ### Colour and styles
+
+The look is defined in `src/render/grid-style.ts` and `src/render/boid-style.ts`. The renderers have
+no built-in appearance.
+
+- **Grid:** a single style.
+- **Boids:** a palette is a named preset. The panel's stroke settings (line and trail widths, trail
+  brightness and fade, and glow) override every palette at once.
 
 Colour ramps span the speed and density ranges that the simulation reports, not fixed values. That
 way, retuning the flock cannot leave a style with a ramp over a range that no boid reaches.
 
-Everything else about the look that the user can adjust is a named preset in
-`src/render/grid-style.ts` or `src/render/boid-style.ts`. The renderers have no built-in appearance.
+Each ramp has three colours. A straight mix between two distant hues passes through grey halfway,
+and that is where most of the flock sits. The middle colour keeps the ramp saturated.
 
 ## Camera
 
@@ -202,8 +226,8 @@ is the only place that turns it into simulation parameters, styles and a camera.
 Sets of settings are saved in `localStorage`. They are validated when loaded, because the stored
 text may come from an older build or may have been edited by hand.
 
-The look is saved as preset names plus overrides, not as a finished style. When a preset is retuned
-later, saved sets that use it get the change.
+The look is saved as a palette name plus overrides, not as a finished style. When a palette is
+retuned later, saved sets that use it get the change.
 
 ### Flock presets
 
@@ -215,6 +239,19 @@ Unlike the look, the flock preset is saved as values, not as a name. Moving a sl
 off its preset, and that change has to survive a reload. The readout finds the preset name by
 comparing values, so when a slider goes back to a preset's value, the readout shows that preset's
 name again.
+
+## Performance
+
+On the M1 Max, 5,000 boids run well above 60 fps without any optimisation code. Nearly all of the
+step time is in the neighbour search, and its cost grows with the square of the local density. Two
+things keep the density down:
+
+- **Looser presets.** The first measurement was well below 60 fps. Spreading the flock out fixed it,
+  and also looked better.
+- **The contact distance.** At 5,000 boids, the mill preset used to slow to over 20 ms per step and
+  kept getting slower. With a contact distance of 10, it stays near 6 ms, measured in Node.
+
+The HUD shows the frame time, and the `p` key records readings to compare machines with.
 
 ## Tests
 
@@ -229,5 +266,5 @@ and are worth reading:
 ## Related documentation
 
 - [README.md](README.md): how to run the app, and what the controls do.
-- [PLAN.md](PLAN.md): what is done and what is left.
+- [IDEAS.md](IDEAS.md): known problems and ideas for what could come next.
 - [CLAUDE.md](CLAUDE.md): the visual and technical direction.
