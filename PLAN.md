@@ -62,8 +62,8 @@ user a couple of seconds, while taking and sharing a screenshot takes tens of se
 | 5    | Controls                 | Review, panel contents Collaborate | Done   |
 | 6    | Camera behaviour         | Collaborate                        | Done   |
 | 7a   | Behaviour tuning         | Collaborate                        | Done   |
-| 7b   | Visual polish            | Collaborate                        | Next   |
-| 8    | Performance and ship     | Solo                               |        |
+| 7b   | Visual polish            | Collaborate                        | Done   |
+| 8    | Performance and ship     | Solo                               | Next   |
 
 Step 7b comes before step 8, and both come last, because both assess the finished app.
 
@@ -149,8 +149,7 @@ and a quantile cannot go beyond the whole flock. The quantile is now a constant 
 out stragglers.
 
 In follow mode the camera controls the zoom, so the panel has two zoom controls and shows whichever
-one is in use. The two settings for tuning the follow zoom are still in the panel. Step 7b decides
-whether they stay.
+one is in use. The two settings for tuning the follow zoom stayed in the panel after step 7b.
 
 ### 7a. Behaviour tuning
 
@@ -177,7 +176,7 @@ one lap takes minutes.
 A pull of constant magnitude beyond some radius would prevent this, because the angular rate would
 then depend on speed.
 
-#### Separation saturates, so a clump that forms does not break up
+#### Separation saturates, so a clump that forms does not break up (partly fixed)
 
 The summed `1/d` vector is normalised before it is used for steering. It therefore pushes no harder
 as the flock gets more crowded, and it shares the force cap with cohesion. Deep inside a clump the
@@ -188,17 +187,37 @@ A minimum contact distance now limits the density, and with it the step time. At
 mill preset used to slow to over 20 ms per step and kept getting slower. With a contact distance of
 10, it stays near 6 ms, measured in Node.
 
-Separation still saturates. A crowded flock packs down to the contact distance instead of keeping to
-its separation radius.
+The classic separation rule still saturates. Crowd pressure, added later, is an alternative rule
+whose push grows as boids get closer and adds up over neighbours. It defaults to 8, so the spacing
+spreads out between the contact distance and the separation radius instead of forming a lattice. No
+preset sets it.
 
 ### 7b. Visual polish
 
-Colour, line weights, how trails fade, glow, the grid's fade curve, and possibly a replacement for
-Tweakpane that matches the look. This step is judged against the finished renderer, so it comes
-last.
+Colour, line weights, how trails fade, glow, the grid's fade curve, and whether to replace
+Tweakpane.
 
-When this step ends, the development tools are removed. The style choices it settles let the presets
-be cut down to the ones that were chosen.
+What was decided:
+
+- **Tweakpane stays.** The panel is titled Flock. The rules a flock preset sets have their own
+  folder, whose title shows the matching preset or `custom`. The other flock settings are in a
+  folder called simulation.
+- **One grid style.** The other grid presets were removed. Grid lines always snap to pixels, tick
+  labels always sit at the edges, and they always use the compact format, such as `1.2k`.
+- **Seven palettes, five of them coloured by density.** Each colour ramp has three colours instead
+  of two, because a mix between two distant hues passes through grey halfway. Signal stays the
+  default.
+- **Floor fade is fixed at 1.**
+- **Line width, trail width, trail brightness, trail fade and glow are panel sliders.** Their values
+  are good enough for now and can be tuned later. Export to console prints them.
+
+Glow is a halo drawn around each chevron and trail in their own shaders. Its radius is in world
+units, so it scales with the zoom, and its cost grows with the zoom too. At glow 0 it costs nothing.
+If it turns out to be too slow, a screen-space bloom pass would replace it: blur a chain of smaller
+copies of the boid layer and add it back on top. Its cost depends only on the screen size.
+
+The plan was to remove the development tools when this step ended. They stay, so the look can still
+be tuned and exported later.
 
 ### 8. Performance and ship
 
@@ -216,12 +235,11 @@ What remains:
 - Painted force fields
 - GPU simulation
 - Level of detail for the boid shape that depends on zoom
-- The two fixes described in step 7a: an origin pull that grows less than linearly, and a separation
-  force that grows with crowding
+- The origin pull that grows less than linearly, described in step 7a
 
 ## Open questions
 
 - ~~Tick label format and placement~~: decided in step 3.
 - ~~Trail construction, chevron proportions and colour~~: decided in step 4a.
 - ~~Slider ranges~~: decided in step 7a.
-- Whether to replace Tweakpane: to be decided in step 7b.
+- ~~Whether to replace Tweakpane~~: decided in step 7b.
