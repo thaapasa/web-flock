@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { MAX_LOG_SCALE, MIN_LOG_SCALE } from '../camera/framing';
 import { BOID_PRESETS } from '../render/boid-style';
-import { GRID_STYLE } from '../render/grid-style';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 import { FLOCK_PRESETS } from '../sim/presets';
@@ -16,7 +15,6 @@ import {
   defaultSettings,
   exportLiteral,
   flockPresetName,
-  gridStyle,
   parse,
   serialise,
   simParams,
@@ -132,6 +130,10 @@ describe('parse', () => {
     expect(parse(stored({ camera: { logScale: value } })).camera.logScale).toBe(expected);
   });
 
+  it('clamps a stored stroke setting to its slider range', () => {
+    expect(parse(stored({ look: { glow: 99 } })).look.glow).toBe(1);
+  });
+
   it('refuses a negative cursor strength, which the mode owns instead', () => {
     expect(parse(stored({ cursor: { strength: -500 } })).cursor.strength).toBe(0);
   });
@@ -139,7 +141,6 @@ describe('parse', () => {
   it.each([
     ['cursor mode', { cursor: { mode: 'hostile' } }],
     ['blend mode', { look: { blend: 'subtractive' } }],
-    ['label placement', { look: { labels: 'corner' } }],
   ])('rejects an unknown %s', (_case, blob) => {
     expect(parse(stored(blob))).toEqual(defaultSettings());
   });
@@ -177,6 +178,18 @@ describe('boidStyle', () => {
     expect(style.trail).toBe('none');
     expect(style.blend).toBe('alpha');
     expect(style.name).toBe(BOID_PRESETS[0].name);
+  });
+
+  it('applies the stroke settings to every palette', () => {
+    const look = defaultSettings().look;
+    look.boid = BOID_PRESETS[BOID_PRESETS.length - 1].name;
+    look.glow = 0.4;
+    look.lineWidth = 2;
+
+    const style = boidStyle(look);
+    expect(style.glow).toBe(0.4);
+    expect(style.lineWidth).toBe(2);
+    expect(style.name).toBe(look.boid);
   });
 
   it('hands back the same object for the same overrides', () => {
@@ -269,22 +282,5 @@ describe('cloneSettings', () => {
 
     expect(settings.flock.fieldOfView).toBe(DEFAULT_SIM_PARAMS.fieldOfView);
     expect(flockPresetName(settings.flock)).toBe(FLOCK_PRESETS[0].name);
-  });
-});
-
-describe('gridStyle', () => {
-  it('returns the grid itself when the override agrees with it', () => {
-    const look = defaultSettings().look;
-    expect(gridStyle(look)).toBe(GRID_STYLE);
-  });
-
-  it('overrides the grid and caches the result', () => {
-    const look = defaultSettings().look;
-    look.snapLines = !GRID_STYLE.snapLines;
-
-    const style = gridStyle(look);
-    expect(style.snapLines).toBe(look.snapLines);
-    expect(style.lineWidth).toBe(GRID_STYLE.lineWidth);
-    expect(gridStyle(look)).toBe(style);
   });
 });

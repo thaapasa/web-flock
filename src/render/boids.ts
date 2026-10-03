@@ -39,6 +39,8 @@ const UNIFORM_NAMES = [
   'uPad',
   'uLineWidth',
   'uBrightness',
+  'uGlow',
+  'uGlowRadius',
   'uColourMode',
   'uRange',
   'uLowColour',
@@ -57,6 +59,9 @@ const TRAIL_UNIFORM_NAMES = [
   'uInset',
   'uTaper',
   'uFalloff',
+  'uGlowReach',
+  'uGlow',
+  'uGlowRadius',
   'uBrightness',
   'uColourMode',
   'uTrailColour',
@@ -161,6 +166,10 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       const [low, high] = colourBand(style, target.ranges);
       const brightness = style.brightness * floorBrightness(style, camera.scale);
       const colourMode = COLOUR_INPUT_CODES[style.colourBy];
+      const glowRadius = style.glowRadius * (length / style.size);
+      // Where the halo has faded below a twentieth. Without a glow the quads
+      // keep their old size, and the shaders skip the halo.
+      const glowReach = style.glow > 0 ? glowRadius * 3 : 0;
 
       buildTransform(camera, size);
       const pixelToClipX = 2 / Math.max(size.deviceWidth, 1);
@@ -190,6 +199,9 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
         gl.uniform1f(trailUniforms.uInset, length * 0.5);
         gl.uniform1f(trailUniforms.uTaper, style.trailTaper);
         gl.uniform1f(trailUniforms.uFalloff, style.trailFalloff);
+        gl.uniform1f(trailUniforms.uGlowReach, glowReach);
+        gl.uniform1f(trailUniforms.uGlow, style.glow);
+        gl.uniform1f(trailUniforms.uGlowRadius, glowRadius);
         gl.uniform1f(trailUniforms.uBrightness, brightness * style.trailBrightness);
 
         gl.uniform1i(trailUniforms.uColourMode, colourMode);
@@ -211,10 +223,12 @@ export function createBoidRenderer(gl: WebGL2RenderingContext): BoidRenderer {
       gl.uniform1f(uniforms.uLength, length);
       gl.uniform1f(uniforms.uHalfWidth, halfWidth);
       // Half the stroke, plus a pixel for the filter's ramp.
-      gl.uniform1f(uniforms.uPad, lineWidth * 0.5 + 1);
+      gl.uniform1f(uniforms.uPad, lineWidth * 0.5 + 1 + glowReach);
       gl.uniform1f(uniforms.uLineWidth, lineWidth);
 
       gl.uniform1f(uniforms.uBrightness, brightness);
+      gl.uniform1f(uniforms.uGlow, style.glow);
+      gl.uniform1f(uniforms.uGlowRadius, glowRadius);
 
       gl.uniform1i(uniforms.uColourMode, colourMode);
       gl.uniform2f(uniforms.uRange, low, high);

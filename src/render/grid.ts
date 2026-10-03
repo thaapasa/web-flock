@@ -25,7 +25,6 @@ const UNIFORM_NAMES = [
   'uSpacing[0]',
   'uPhase[0]',
   'uWeightLinear[0]',
-  'uSnapLines',
   'uLineWidth',
   'uLineColour',
   'uBrightness',
@@ -119,7 +118,6 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
       gl.uniform2fv(uniforms['uPhase[0]'], phase);
       gl.uniform1fv(uniforms['uWeightLinear[0]'], weight);
 
-      gl.uniform1i(uniforms.uSnapLines, style.snapLines ? 1 : 0);
       gl.uniform1f(uniforms.uLineWidth, style.lineWidth * pixelRatio);
       gl.uniform3fv(uniforms.uLineColour, style.lineColor);
       gl.uniform1f(uniforms.uBrightness, style.brightness);

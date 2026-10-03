@@ -18,16 +18,6 @@ uniform vec2 uPhase[MAX_BANDS];
  */
 uniform float uWeightLinear[MAX_BANDS];
 
-/**
- * Whether each line is moved to the nearest pixel centre before it is drawn.
- *
- * A snapped line covers the same pixels wherever the view is, so it holds one
- * brightness while you pan. It pays for that by moving a whole pixel at a
- * time, and by spacing that alternates between two pixel counts where the true
- * spacing falls between them.
- */
-uniform bool uSnapLines;
-
 uniform float uLineWidth;
 uniform vec3 uLineColour;
 uniform float uBrightness;
@@ -83,9 +73,16 @@ float shade(float coverage) {
   return pow(coverage, 1.0 / 2.2);
 }
 
-/** A screen coordinate, moved onto a pixel centre when snapping is on. */
+/**
+ * A screen coordinate, moved onto the nearest pixel centre.
+ *
+ * A snapped line covers the same pixels wherever the view is, so it holds one
+ * brightness while you pan. It pays for that by moving a whole pixel at a
+ * time, and by spacing that alternates between two pixel counts where the true
+ * spacing falls between them.
+ */
 float snapCoord(float position) {
-  return uSnapLines ? floor(position) + 0.5 : position;
+  return floor(position) + 0.5;
 }
 
 /**

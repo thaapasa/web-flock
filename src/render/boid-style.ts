@@ -101,6 +101,16 @@ export interface BoidStyle {
   readonly halfAngle: number;
   /** Stroke width of the chevron, CSS pixels. Below 1 it draws dimmer, not thinner. */
   readonly lineWidth: number;
+  /**
+   * Brightness of the soft halo around the chevron and its trail, as a
+   * fraction of the stroke's own. 0 draws no halo and no extra pixels.
+   */
+  readonly glow: number;
+  /**
+   * How far the halo takes to fade to a third, in world units. It scales with
+   * the mark, so it stops shrinking where the mark does at `minScreenSize`.
+   */
+  readonly glowRadius: number;
 
   readonly colourBy: ColourInput;
   /** The colour at the bottom of the ramp, and the whole colour when `flat`. */
@@ -138,6 +148,18 @@ export interface BoidStyle {
   readonly blend: BlendMode;
 }
 
+/** The style fields the panel can override for every palette at once. */
+export const STROKE_KEYS = [
+  'lineWidth',
+  'trailWidth',
+  'trailBrightness',
+  'trailFalloff',
+  'glow',
+  'glowRadius',
+] as const satisfies readonly (keyof BoidStyle)[];
+
+export type StrokeKey = (typeof STROKE_KEYS)[number];
+
 function preset(
   overrides: Partial<BoidStyle> & { name: string; ramp?: ColourRamp },
 ): Readonly<BoidStyle> {
@@ -149,6 +171,8 @@ function preset(
     floorFade: 1,
     halfAngle: 0.42,
     lineWidth: 1.4,
+    glow: 0,
+    glowRadius: 1,
 
     colourBy: 'speed',
     lowColor,

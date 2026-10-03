@@ -11,7 +11,7 @@ import { createFrameStats } from './render/frame-stats';
 import { getContext } from './render/gl';
 import type { CursorRing } from './render/grid';
 import { createGridRenderer } from './render/grid';
-import type { OverlayOptions } from './render/overlay';
+import { GRID_STYLE } from './render/grid-style';
 import { createOverlay, DEFAULT_OVERLAY_OPTIONS } from './render/overlay';
 import { createUploadTrailHistory } from './render/trail-history';
 import { createFlock } from './sim/flock';
@@ -27,7 +27,6 @@ import {
   defaultSettings,
   exportLiteral,
   flockPresetName,
-  gridStyle,
   parse,
   serialise,
   simParams,
@@ -121,8 +120,7 @@ export function createApp(
   const trails = createUploadTrailHistory(gl, simulation);
   const target = boids.bind(feed, trails, simulation.ranges);
 
-  const overlayOptions: OverlayOptions = { ...DEFAULT_OVERLAY_OPTIONS };
-  const overlay = createOverlay(overlayElement, overlayOptions);
+  const overlay = createOverlay(overlayElement, DEFAULT_OVERLAY_OPTIONS);
 
   const stats = createFrameStats();
 
@@ -133,9 +131,6 @@ export function createApp(
     // A new boid reuses a slot, so without this it arrives trailing whatever
     // the last occupant of that slot was doing.
     if (simulation.count > before) trails.seed(before, simulation.count);
-
-    overlayOptions.placement = settings.look.labels;
-    overlayOptions.format = settings.look.labelFormat;
   };
 
   let saveHandle: ReturnType<typeof setTimeout> | null = null;
@@ -344,7 +339,6 @@ export function createApp(
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    const gridLook = gridStyle(settings.look);
     const boidLook = boidStyle(settings.look);
 
     const reach = pushing ? cursorRadius(settings) : 0;
@@ -356,7 +350,7 @@ export function createApp(
       cursorRing = ring;
     }
 
-    grid.draw(camera, surface.size, gridLook, cursorRing);
+    grid.draw(camera, surface.size, GRID_STYLE, cursorRing);
     boids.draw(target, camera, surface.size, boidLook);
 
     overlay.draw({

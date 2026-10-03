@@ -14,6 +14,8 @@ uniform float uLength;
 uniform float uHalfWidth;
 uniform float uLineWidth;
 uniform float uBrightness;
+uniform float uGlow;
+uniform float uGlowRadius;
 
 out vec4 fragColour;
 
@@ -37,7 +39,14 @@ void main() {
     segmentDistance(vLocal, nose, tail + vec2(0.0, uHalfWidth)),
     segmentDistance(vLocal, nose, tail - vec2(0.0, uHalfWidth)));
 
+  float coverage = lineCoverage(d, uLineWidth);
+  // Every fragment in the draw takes the same side of this, so without a glow
+  // the halo costs nothing.
+  if (uGlow > 0.0) {
+    float halo = uGlow * exp(-max(d - uLineWidth * 0.5, 0.0) / max(uGlowRadius, 1e-3));
+    coverage = min(coverage + halo, 1.0);
+  }
   // Premultiplied, so one fragment shader serves both blend modes.
-  float alpha = lineCoverage(d, uLineWidth) * uBrightness;
+  float alpha = coverage * uBrightness;
   fragColour = vec4(vColour * alpha, alpha);
 }

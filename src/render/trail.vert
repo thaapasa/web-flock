@@ -37,6 +37,8 @@ uniform float uHalfWidth;
 uniform float uInset;
 /** Exponent on the width taper. Below 1 the ribbon keeps its body longer. */
 uniform float uTaper;
+/** Device pixels added either side for the glow, or 0 without one. */
+uniform float uGlowReach;
 uniform float uFalloff;
 uniform float uBrightness;
 
@@ -94,7 +96,7 @@ void main() {
   vAlpha = pow(left, uFalloff) * uBrightness;
   // A pixel of slack either side, so a ribbon thinner than a pixel has somewhere
   // to fade out instead of being clipped away by the geometry.
-  float reach = vHalf + 1.0;
+  float reach = vHalf + 1.0 + uGlowReach;
   vAcross = side * reach;
 
   vec4 read = uTrailColour == 1 ? here : vec4(aPosition, length(aVelocity), aDensity);

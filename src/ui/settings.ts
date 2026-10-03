@@ -6,12 +6,9 @@ import {
   MIN_FRAME_LOG,
   MIN_LOG_SCALE,
 } from '../camera/framing';
-import type { BlendMode, BoidStyle } from '../render/boid-style';
-import { BOID_PRESETS, DEFAULT_BOID_STYLE } from '../render/boid-style';
-import type { GridStyle } from '../render/grid-style';
-import { GRID_STYLE } from '../render/grid-style';
-import type { LabelFormat, LabelPlacement } from '../render/overlay';
-import { DEFAULT_OVERLAY_OPTIONS, formatFramePercent } from '../render/overlay';
+import type { BlendMode, BoidStyle, StrokeKey } from '../render/boid-style';
+import { BOID_PRESETS, DEFAULT_BOID_STYLE, STROKE_KEYS } from '../render/boid-style';
+import { formatFramePercent } from '../render/overlay';
 import type { SimParams } from '../sim/params';
 import { DEFAULT_SIM_PARAMS } from '../sim/params';
 import type { FlockPreset } from '../sim/presets';
@@ -57,18 +54,22 @@ export interface CameraSettings {
   zoomTau: number;
 }
 
-export interface LookSettings {
+export interface LookSettings extends Record<StrokeKey, number> {
   /** Name of a `BOID_PRESETS` entry. */
   boid: string;
   trails: boolean;
   blend: BlendMode;
-  floorFade: number;
-
-  /** Overrides the grid's `snapLines`, so the two can be compared live. */
-  snapLines: boolean;
-  labels: LabelPlacement;
-  labelFormat: LabelFormat;
 }
+
+/** Slider ranges for the stroke settings, which stored values are clamped to. */
+export const STROKE_RANGES: Record<StrokeKey, { min: number; max: number; step: number }> = {
+  lineWidth: { min: 0.5, max: 4, step: 0.05 },
+  trailWidth: { min: 0, max: 3, step: 0.05 },
+  trailBrightness: { min: 0, max: 1.5, step: 0.01 },
+  trailFalloff: { min: 0.2, max: 5, step: 0.05 },
+  glow: { min: 0, max: 1, step: 0.01 },
+  glowRadius: { min: 0.1, max: 5, step: 0.05 },
+};
 
 /** Simulation steps per second that `ClockSettings.stepRate` may take. */
 export const STEP_RATES: readonly number[] = [60, 90, 120];
@@ -104,10 +105,7 @@ export function defaultSettings(): Settings {
       boid: DEFAULT_BOID_STYLE.name,
       trails: DEFAULT_BOID_STYLE.trail !== 'none',
       blend: DEFAULT_BOID_STYLE.blend,
-      floorFade: DEFAULT_BOID_STYLE.floorFade,
-      snapLines: GRID_STYLE.snapLines,
-      labels: DEFAULT_OVERLAY_OPTIONS.placement,
-      labelFormat: DEFAULT_OVERLAY_OPTIONS.format,
+      ...strokeOf(DEFAULT_BOID_STYLE),
     },
   };
 }
@@ -161,20 +159,31 @@ export function findPreset<T extends { readonly name: string }>(
  */
 const boidVariants = new Map<string, Readonly<BoidStyle>>();
 
+function strokeOf(style: Readonly<Record<StrokeKey, number>>): Record<StrokeKey, number> {
+  const stroke = {} as Record<StrokeKey, number>;
+  for (const key of STROKE_KEYS) stroke[key] = style[key];
+  return stroke;
+}
+
 export function applyLook(base: Readonly<BoidStyle>, look: LookSettings): Readonly<BoidStyle> {
   const trail = look.trails ? base.trail : 'none';
-  if (trail === base.trail && look.blend === base.blend && look.floorFade === base.floorFade) {
+  if (
+    trail === base.trail &&
+    look.blend === base.blend &&
+    STROKE_KEYS.every((key) => look[key] === base[key])
+  ) {
     return base;
   }
 
-  const key = `${base.name}|${trail}|${look.blend}|${look.floorFade}`;
+  const stroke = STROKE_KEYS.map((key) => look[key]).join('|');
+  const key = `${base.name}|${trail}|${look.blend}|${stroke}`;
   let variant = boidVariants.get(key);
   if (!variant) {
     variant = Object.freeze({
       ...base,
       trail,
       blend: look.blend,
-      floorFade: look.floorFade,
+      ...strokeOf(look),
     } satisfies BoidStyle);
     boidVariants.set(key, variant);
   }
@@ -183,16 +192,6 @@ export function applyLook(base: Readonly<BoidStyle>, look: LookSettings): Readon
 
 export function boidStyle(look: LookSettings): Readonly<BoidStyle> {
   return applyLook(findPreset(BOID_PRESETS, look.boid, DEFAULT_BOID_STYLE), look);
-}
-
-/** The grid with the panel's override on it, built once. */
-const flippedGrid: Readonly<GridStyle> = Object.freeze({
-  ...GRID_STYLE,
-  snapLines: !GRID_STYLE.snapLines,
-} satisfies GridStyle);
-
-export function gridStyle(look: LookSettings): Readonly<GridStyle> {
-  return look.snapLines === GRID_STYLE.snapLines ? GRID_STYLE : flippedGrid;
 }
 
 /**
@@ -266,16 +265,12 @@ export function parse(text: string | null): Settings {
       BOID_PRESETS.map((preset) => preset.name),
       settings.look.boid,
     );
-    settings.look.snapLines = bool(look.snapLines, settings.look.snapLines);
     settings.look.trails = bool(look.trails, settings.look.trails);
     settings.look.blend = oneOf(look.blend, ['additive', 'alpha'] as const, settings.look.blend);
-    settings.look.floorFade = clamp(num(look.floorFade, settings.look.floorFade), 0, 2);
-    settings.look.labels = oneOf(look.labels, ['edge', 'axis'] as const, settings.look.labels);
-    settings.look.labelFormat = oneOf(
-      look.labelFormat,
-      ['plain', 'compact'] as const,
-      settings.look.labelFormat,
-    );
+    for (const key of STROKE_KEYS) {
+      const { min, max } = STROKE_RANGES[key];
+      settings.look[key] = clamp(num(look[key], settings.look[key]), min, max);
+    }
   }
 
   return settings;
@@ -319,6 +314,7 @@ export function exportLiteral(settings: Settings): string {
   return [
     '// web-flock parameters',
     `// look ${look.boid} · trails ${look.trails ? 'on' : 'off'} · ${look.blend}`,
+    `// stroke ${STROKE_KEYS.map((key) => `${key} ${short(look[key])}`).join(' · ')}`,
     camera.follow
       ? `// follow on · frame ${formatFramePercent(camera.frameLog)} · cursor ${settings.cursor.mode}`
       : `// follow off · zoom ${(10 ** camera.logScale).toPrecision(3)} px/u` +

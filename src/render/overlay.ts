@@ -11,14 +11,7 @@ import type { FrameStats } from './frame-stats';
  * the canvas underneath keeps receiving them.
  */
 
-export type LabelPlacement = 'edge' | 'axis';
-
-/** How tick values read: `1200` against `1.2k`. */
-export type LabelFormat = 'plain' | 'compact';
-
 export interface OverlayOptions {
-  placement: LabelPlacement;
-  format: LabelFormat;
   /**
    * Minimum CSS pixels between labelled ticks, which decides which decade gets
    * labelled. The labels' `minPixelSpacing`, and much larger than the grid's,
@@ -30,8 +23,6 @@ export interface OverlayOptions {
 }
 
 export const DEFAULT_OVERLAY_OPTIONS: OverlayOptions = {
-  placement: 'edge',
-  format: 'compact',
   minSpacing: 90,
   fontSize: 11,
 };
@@ -120,8 +111,7 @@ export function createOverlay(
 
   const drawTicks = (frame: OverlayFrame): void => {
     const { camera } = frame;
-    const { placement, format, minSpacing } = options;
-    const width = camera.viewportWidth;
+    const { minSpacing } = options;
     const height = camera.viewportHeight;
 
     // The finest decade whose ticks are at least `minSpacing` apart, found the
@@ -138,29 +128,21 @@ export function createOverlay(
     const bounds = camera.visibleBounds();
     ctx.font = `${options.fontSize}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
 
-    const origin = camera.worldToScreen(0, 0, scratch);
-    const axisY = clamp(origin.y + 4, MARGIN + options.fontSize, height - MARGIN);
-    const axisX = clamp(origin.x + 5, MARGIN, width - 48);
-
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    const labelY = placement === 'edge' ? height - MARGIN : axisY + options.fontSize;
+    const labelY = height - MARGIN;
     for (let i = Math.ceil(bounds.minX / step); i <= Math.floor(bounds.maxX / step); i++) {
       const value = i * step;
       const x = camera.worldToScreen(value, 0, scratch).x;
-      label(formatTick(value, exponent, format), x, labelY, i % 10 === 0 ? 1 : fine);
+      label(formatTick(value, exponent), x, labelY, i % 10 === 0 ? 1 : fine);
     }
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    const labelX = placement === 'edge' ? MARGIN : axisX;
     for (let i = Math.ceil(bounds.minY / step); i <= Math.floor(bounds.maxY / step); i++) {
-      // On the axis the two zeroes would sit on top of each other; the x axis
-      // keeps it.
-      if (i === 0 && placement === 'axis') continue;
       const value = i * step;
       const y = camera.worldToScreen(0, value, scratch).y;
-      label(formatTick(value, exponent, format), labelX, y, i % 10 === 0 ? 1 : fine);
+      label(formatTick(value, exponent), MARGIN, y, i % 10 === 0 ? 1 : fine);
     }
   };
 
@@ -176,7 +158,7 @@ export function createOverlay(
       `cursor  ${at}${frame.cursorMode ? ` · ${frame.cursorMode}` : ''}`,
       `centre  ${camera.center.x.toFixed(decimals)}, ${camera.center.y.toFixed(decimals)}` +
         `${frame.follow ? ' · follow' : ' · free'}`,
-      `grid    ${formatTick(10 ** gridExponent, gridExponent, options.format)} · ${formatScale(camera.scale)}`,
+      `grid    ${formatTick(10 ** gridExponent, gridExponent)} · ${formatScale(camera.scale)}`,
       ...(frame.boid ? [`boid    ${frame.boid.styleName}`] : []),
       ...(frame.flock ? [`flock   ${frame.flock}`] : []),
     ];
@@ -269,27 +251,26 @@ const COMPACT_UNITS = [
 ] as const;
 
 /**
+ * A tick value with a unit suffix, such as `1.2k` for 1200.
+ *
  * `exponent` is the decade the tick belongs to, and it decides how many digits
  * are meaningful: at a step of 100 there is nothing after the point to say,
  * and at a step of 0.01 there are two digits that matter.
  */
-export function formatTick(value: number, exponent: number, format: LabelFormat): string {
+export function formatTick(value: number, exponent: number): string {
   if (value === 0) return '0';
 
-  // Before the suffixes, not after: the largest suffix is G, so a compact
-  // format left alone answers 1e12 with `1000G`, which is worse than the
-  // exponential it was meant to avoid.
+  // Before the suffixes, not after: the largest suffix is G, so without this
+  // 1e12 would read `1000G`, which is worse than the exponential.
   if (exponent <= -5 || Math.abs(value) >= 1e12) {
     return value.toExponential(0).replace('e+', 'e');
   }
 
-  if (format === 'compact') {
-    const magnitude = Math.abs(value);
-    for (const unit of COMPACT_UNITS) {
-      if (magnitude >= unit.at) {
-        const decimals = clamp(Math.round(Math.log10(unit.at)) - exponent, 0, 3);
-        return trimZeros((value / unit.at).toFixed(decimals)) + unit.suffix;
-      }
+  const magnitude = Math.abs(value);
+  for (const unit of COMPACT_UNITS) {
+    if (magnitude >= unit.at) {
+      const decimals = clamp(Math.round(Math.log10(unit.at)) - exponent, 0, 3);
+      return trimZeros((value / unit.at).toFixed(decimals)) + unit.suffix;
     }
   }
 

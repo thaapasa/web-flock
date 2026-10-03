@@ -41,15 +41,6 @@ export interface GridStyle {
 
   readonly fadeCurve: FadeCurve;
 
-  /**
-   * Whether every line is moved to the nearest pixel centre.
-   *
-   * On, a line holds one brightness while the view moves, and moves a whole
-   * pixel at a time. Off, it sits where the world says and changes brightness
-   * as it crosses pixels. Which of the two reads better is a taste call.
-   */
-  readonly snapLines: boolean;
-
   /** CSS pixels. Below 1 the line is drawn dimmer rather than thinner. */
   readonly lineWidth: number;
   /** The grid's only colour. The axes and the origin share it. */
@@ -84,7 +75,6 @@ export const GRID_STYLE: Readonly<GridStyle> = Object.freeze({
   fadeDecades: 2,
   fadeCurve: 'smooth',
 
-  snapLines: true,
   lineWidth: 1,
   lineColor: CYAN,
   brightness: 0.55,

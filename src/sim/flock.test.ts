@@ -188,7 +188,14 @@ describe('flock', () => {
       }
       return min;
     };
-    const squeeze = { spawnRadius: 100, cursorStrength: 800, cursorRadius: 300 };
+    // Crowd pressure off: it also keeps boids apart, and this is about the
+    // contact distance alone.
+    const squeeze = {
+      spawnRadius: 100,
+      cursorStrength: 800,
+      cursorRadius: 300,
+      crowdPressure: 0,
+    };
     const packed = { cursor: { x: 0, y: 0 } };
 
     const free = makeFlock({ ...squeeze, contactDistance: 0 });

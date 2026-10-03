@@ -99,7 +99,7 @@ export interface SimParams extends FlockBehaviour {
 export const DEFAULT_SIM_PARAMS: Readonly<SimParams> = Object.freeze({
   count: 500,
   contactDistance: 8,
-  crowdPressure: 0,
+  crowdPressure: 8,
 
   ...flockBehaviour(DEFAULT_FLOCK_PRESET),
 

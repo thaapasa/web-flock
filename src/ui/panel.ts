@@ -12,7 +12,14 @@ import {
 import { BOID_PRESETS } from '../render/boid-style';
 import { formatFramePercent, formatScale } from '../render/overlay';
 import type { Settings } from './settings';
-import { cloneSettings, copyInto, CURSOR_MODES, flockPresetName, STEP_RATES } from './settings';
+import {
+  cloneSettings,
+  copyInto,
+  CURSOR_MODES,
+  flockPresetName,
+  STEP_RATES,
+  STROKE_RANGES,
+} from './settings';
 
 /** Degrees, for an angle the simulation keeps in radians. */
 const DEGREES = (value: number): string => `${((value * 180) / Math.PI).toFixed(0)}°`;
@@ -85,7 +92,7 @@ export function createPanel(options: PanelOptions): Panel {
   simulationFolder.addBinding(flock, 'crowdPressure', {
     label: 'pressure',
     min: 0,
-    max: 8,
+    max: 16,
     step: 0.1,
   });
   // What a flock preset sets, titled with the preset it matches.
@@ -230,13 +237,18 @@ export function createPanel(options: PanelOptions): Panel {
   lookFolder.addBinding(look, 'boid', { label: 'palette', options: presetOptions(BOID_PRESETS) });
   lookFolder.addBinding(look, 'trails');
   lookFolder.addBinding(look, 'blend', { options: { additive: 'additive', alpha: 'alpha' } });
-  lookFolder.addBinding(look, 'floorFade', { label: 'floor fade', min: 0, max: 2, step: 1 });
-  lookFolder.addBinding(look, 'snapLines', { label: 'snap lines' });
-  lookFolder.addBinding(look, 'labels', { options: { edge: 'edge', axis: 'axis' } });
-  lookFolder.addBinding(look, 'labelFormat', {
-    label: 'format',
-    options: { compact: 'compact', plain: 'plain' },
+  lookFolder.addBinding(look, 'lineWidth', { label: 'line width', ...STROKE_RANGES.lineWidth });
+  lookFolder.addBinding(look, 'trailWidth', { label: 'trail width', ...STROKE_RANGES.trailWidth });
+  lookFolder.addBinding(look, 'trailBrightness', {
+    label: 'trail bright',
+    ...STROKE_RANGES.trailBrightness,
   });
+  lookFolder.addBinding(look, 'trailFalloff', {
+    label: 'trail fade',
+    ...STROKE_RANGES.trailFalloff,
+  });
+  lookFolder.addBinding(look, 'glow', STROKE_RANGES.glow);
+  lookFolder.addBinding(look, 'glowRadius', { label: 'glow r', ...STROKE_RANGES.glowRadius });
 
   pane.addButton({ title: 'export to console' }).on('click', () => {
     hooks.exportSettings();
