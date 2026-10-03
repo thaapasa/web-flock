@@ -64,11 +64,31 @@ export interface GridStyle {
   /** As `axisBoost`, for the origin marker. */
   readonly originBoost: number;
 
-  /** As `axisBoost`, for the ring that shows how far the cursor force reaches. */
-  readonly cursorBoost: number;
+  /**
+   * The ring that shows how far the cursor force reaches, and its pulses. Full
+   * colours rather than boosts on the grid's: the two forces have to look
+   * different from each other and from the grid.
+   *
+   * Red-orange against pale cyan, rather than red against green, so the pair
+   * still differs in lightness and warmth for red-green colour blindness.
+   */
+  readonly repelColour: RGB;
+  readonly attractColour: RGB;
+  /**
+   * Seconds a pulse takes to cross from the cursor to the ring, or back, when
+   * the force is `pulseStrength`. See `pulseRate`.
+   */
+  readonly pulseTravel: number;
+  readonly pulseStrength: number;
+  /** Pulses crossing at once, spread evenly through one crossing. */
+  readonly pulseCount: number;
+  /** A pulse's brightness at its peak, as a fraction of the ring's. */
+  readonly pulseBrightness: number;
 }
 
 const CYAN: RGB = [0.55, 0.85, 1.0];
+const RED_ORANGE: RGB = [1.0, 0.38, 0.22];
+const PALE_CYAN: RGB = [0.62, 0.86, 0.95];
 
 export const GRID_STYLE: Readonly<GridStyle> = Object.freeze({
   minPixelSpacing: 24,
@@ -85,5 +105,22 @@ export const GRID_STYLE: Readonly<GridStyle> = Object.freeze({
   originRadius: 4,
   originBoost: 1.5,
 
-  cursorBoost: 1.15,
+  repelColour: RED_ORANGE,
+  attractColour: PALE_CYAN,
+  pulseTravel: 1.6,
+  pulseStrength: 500,
+  pulseCount: 2,
+  pulseBrightness: 0.5,
 } satisfies GridStyle);
+
+/**
+ * Crossings per second for a cursor force of the given magnitude, so a
+ * stronger force pulses faster.
+ *
+ * By the square root of the strength, because the slider spans a factor of
+ * 200: in proportion, the weak end would barely move and the strong end would
+ * flicker.
+ */
+export function pulseRate(style: Readonly<GridStyle>, strength: number): number {
+  return Math.sqrt(Math.max(0, strength) / style.pulseStrength) / style.pulseTravel;
+}

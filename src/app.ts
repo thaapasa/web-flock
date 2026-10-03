@@ -11,7 +11,7 @@ import { createFrameStats } from './render/frame-stats';
 import { getContext } from './render/gl';
 import type { CursorRing } from './render/grid';
 import { createGridRenderer } from './render/grid';
-import { GRID_STYLE } from './render/grid-style';
+import { GRID_STYLE, pulseRate } from './render/grid-style';
 import { createOverlay, DEFAULT_OVERLAY_OPTIONS } from './render/overlay';
 import { createUploadTrailHistory } from './render/trail-history';
 import { createFlock } from './sim/flock';
@@ -19,7 +19,7 @@ import type { SimInput, Simulation } from './sim/simulation';
 import { createAppKeys } from './ui/keys';
 import type { Panel } from './ui/panel';
 import { createPanel } from './ui/panel';
-import type { Settings } from './ui/settings';
+import type { CursorMode, Settings } from './ui/settings';
 import {
   boidStyle,
   copyInto,
@@ -27,6 +27,7 @@ import {
   defaultSettings,
   exportLiteral,
   flockPresetName,
+  heldCursorMode,
   parse,
   serialise,
   simParams,
@@ -124,10 +125,15 @@ export function createApp(
 
   const stats = createFrameStats();
 
+  /** True while space is held down. */
+  let cursorHeld = false;
+  const cursorMode = (): CursorMode =>
+    cursorHeld ? heldCursorMode(settings.cursor.mode) : settings.cursor.mode;
+
   /** Cheap enough to call on every step of a slider drag, which is what it gets. */
   const apply = (): void => {
     const before = simulation.count;
-    simulation.setParams(simParams(settings));
+    simulation.setParams(simParams(settings, cursorMode()));
     // A new boid reuses a slot, so without this it arrives trailing whatever
     // the last occupant of that slot was doing.
     if (simulation.count > before) trails.seed(before, simulation.count);
@@ -245,6 +251,10 @@ export function createApp(
         apply();
         scheduleSave();
       },
+      holdCursor: (held: boolean) => {
+        cursorHeld = held;
+        apply();
+      },
       dumpReadings,
       clearReadings: () => readings.clear(),
     },
@@ -283,7 +293,13 @@ export function createApp(
   gl.clearColor(0, 0, 0, 1);
 
   /** Reused each frame. The renderer sees these fields as readonly; we do not. */
-  const ring: { x: number; y: number; radius: number } = { x: 0, y: 0, radius: 0 };
+  const ring: { -readonly [K in keyof CursorRing]: CursorRing[K] } = {
+    x: 0,
+    y: 0,
+    radius: 0,
+    direction: 1,
+    phase: 0,
+  };
 
   let frameHandle = 0;
   let running = false;
@@ -303,7 +319,8 @@ export function createApp(
     if (cursorOverCanvas) camera.screenToWorld(cursorScreenX, cursorScreenY, cursor);
     // A cursor set to push nothing is passed as null, so the step skips the
     // distance test for every boid instead of multiplying by zero.
-    const pushing = cursorOverCanvas && settings.cursor.mode !== 'nothing';
+    const mode = cursorMode();
+    const pushing = cursorOverCanvas && mode !== 'nothing';
     input.cursor = pushing ? cursor : null;
 
     const fixedStep = 1 / settings.clock.stepRate;
@@ -341,12 +358,15 @@ export function createApp(
 
     const boidLook = boidStyle(settings.look);
 
-    const reach = pushing ? cursorRadius(settings) : 0;
+    const reach = pushing ? cursorRadius(settings, mode) : 0;
     let cursorRing: CursorRing | null = null;
     if (reach > 0) {
       ring.x = cursor.x;
       ring.y = cursor.y;
       ring.radius = reach;
+      ring.direction = mode === 'predator' ? 1 : -1;
+      // Wrapped every frame, so it never grows large enough to lose precision.
+      ring.phase = (ring.phase + dt * pulseRate(GRID_STYLE, settings.cursor.strength)) % 1;
       cursorRing = ring;
     }
 
@@ -356,7 +376,7 @@ export function createApp(
     overlay.draw({
       camera,
       cursor: cursorOverCanvas ? cursor : null,
-      cursorMode: pushing ? settings.cursor.mode : '',
+      cursorMode: pushing ? mode : '',
       follow: settings.camera.follow,
       boid: { styleName: boidLook.name, count: feed.count },
       flock: flockPresetName(settings.flock),

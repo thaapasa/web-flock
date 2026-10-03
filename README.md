@@ -39,7 +39,9 @@ Every change in the panel takes effect immediately. The panel has five sections:
   the field of view, the speed and turn limits, the pull toward the origin, and wander. The title
   shows which preset they match, or `custom` if they match none.
 - **cursor**: makes the cursor a predator, an attractor or nothing. It has a strength and a reach.
-  The reach is drawn as a ring around the cursor.
+  The reach is drawn as a ring around the cursor: red-orange for a predator and pale cyan for an
+  attractor. Pulses move across the disc inside it in the direction the force moves boids, and
+  faster for a stronger force.
 - **camera**: follow, the zoom, and a button that fits the flock on screen.
 - **look**: the palette, trails, blending, line and trail widths, how trails fade, and glow.
 
@@ -65,17 +67,19 @@ With follow off, the zoom is a plain scale that you set yourself.
 
 ### Controls
 
-| Input                | Action                                          |
-| -------------------- | ----------------------------------------------- |
-| Wheel                | Zoom, around the pointer when follow is off     |
-| Drag                 | Pan, and turn follow off                        |
-| `f`                  | Turn follow on or off                           |
-| `z`                  | Fit the flock on screen                         |
-| `+` / `-`            | Zoom in or out by a small step                  |
-| Number key           | Choose a flock preset from `src/sim/presets.ts` |
-| Shift and number key | Choose a palette                                |
-| `p`                  | Record a frame-time reading and print the log   |
-| `P`                  | Clear the frame-time log                        |
+| Input                | Action                                                  |
+| -------------------- | ------------------------------------------------------- |
+| Wheel                | Zoom, around the pointer when follow is off             |
+| Drag                 | Pan, and turn follow off                                |
+| `f`                  | Turn follow on or off                                   |
+| `z`                  | Fit the flock on screen                                 |
+| `c`                  | Cycle the cursor mode: nothing, predator, attractor     |
+| Hold space           | Switch to the other force; repel if the mode is nothing |
+| `+` / `-`            | Zoom in or out by a small step                          |
+| Number key           | Choose a flock preset from `src/sim/presets.ts`         |
+| Shift and number key | Choose a palette                                        |
+| `p`                  | Record a frame-time reading and print the log           |
+| `P`                  | Clear the frame-time log                                |
 
 The readout shows the name of the current flock preset and palette. When you move a slider, it shows
 `custom` instead.

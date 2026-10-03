@@ -15,6 +15,8 @@ import {
   defaultSettings,
   exportLiteral,
   flockPresetName,
+  heldCursorMode,
+  nextCursorMode,
   parse,
   serialise,
   simParams,
@@ -24,6 +26,20 @@ import {
 function stored(settings: unknown): string {
   return JSON.stringify({ version: 1, settings });
 }
+
+describe('cursor modes', () => {
+  it('cycles through every mode and back', () => {
+    expect(nextCursorMode('nothing')).toBe('predator');
+    expect(nextCursorMode('predator')).toBe('attractor');
+    expect(nextCursorMode('attractor')).toBe('nothing');
+  });
+
+  it('holds the opposite force, or repel when the set mode is nothing', () => {
+    expect(heldCursorMode('nothing')).toBe('predator');
+    expect(heldCursorMode('predator')).toBe('attractor');
+    expect(heldCursorMode('attractor')).toBe('predator');
+  });
+});
 
 describe('simParams', () => {
   it('turns the cursor mode and magnitude back into one signed strength', () => {
@@ -45,6 +61,16 @@ describe('simParams', () => {
     expect(simParams(settings).cursorStrength).toBe(0);
     expect(settings.cursor.strength).toBe(400);
     expect(cursorRadius(settings)).toBe(0);
+  });
+
+  it('takes the force from a given mode over the set one', () => {
+    const settings = defaultSettings();
+    settings.cursor.strength = 400;
+    settings.cursor.mode = 'nothing';
+
+    expect(simParams(settings, 'predator').cursorStrength).toBe(-400);
+    expect(cursorRadius(settings, 'predator')).toBe(settings.flock.cursorRadius);
+    expect(settings.cursor.mode).toBe('nothing');
   });
 
   it('carries every other parameter through untouched', () => {

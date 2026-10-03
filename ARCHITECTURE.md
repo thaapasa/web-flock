@@ -147,6 +147,11 @@ The shader works in device pixels and never receives a world coordinate. Far fro
 float32 does not have enough precision for world positions, and the lines start to shimmer. To avoid
 this, the CPU converts the world position to a small pixel offset in float64 before uploading it.
 
+The same pass draws the ring that shows the cursor force's reach, and the pulses inside it. A
+separate pass would need blending, which the boid pass leaves off. The app advances the pulses a
+little each frame at a speed set by the force's strength. It does not derive their position from the
+clock, because then a change of strength would make the pulses jump.
+
 ### Boids
 
 The boids are drawn with two instanced draw calls: the trail ribbons first, then the chevrons on
@@ -222,9 +227,13 @@ farthest one, so a single straggler cannot pull the camera away.
 
 ## Settings
 
-A single object holds everything the user can change. The panel, the mouse wheel and the preset keys
-all change this object in place, so there is no second copy that could go out of sync. `src/app.ts`
-is the only place that turns it into simulation parameters, styles and a camera.
+A single object holds everything the user can change. The panel, the mouse wheel, the drag and the
+keys all change this object in place, so there is no second copy that could go out of sync.
+`src/app.ts` is the only place that turns it into simulation parameters, styles and a camera.
+
+Holding space is the exception. It switches the cursor to the other force only while it is held, so
+`src/app.ts` keeps it as a flag and never writes it to the settings. That keeps it out of the panel,
+the saved set and the export.
 
 ### Saved sets
 

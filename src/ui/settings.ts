@@ -25,6 +25,19 @@ const CURSOR_SIGN: Record<CursorMode, number> = {
   attractor: 1,
 };
 
+/** The mode after `mode` in `CURSOR_MODES`, wrapping round to the first. */
+export function nextCursorMode(mode: CursorMode): CursorMode {
+  return CURSOR_MODES[(CURSOR_MODES.indexOf(mode) + 1) % CURSOR_MODES.length];
+}
+
+/**
+ * The force a held key switches to: the opposite of the set mode, or repel
+ * when the set mode is nothing.
+ */
+export function heldCursorMode(mode: CursorMode): CursorMode {
+  return mode === 'predator' ? 'attractor' : 'predator';
+}
+
 export type FlockSettings = Omit<SimParams, 'cursorStrength'>;
 
 export interface CursorSettings {
@@ -110,16 +123,17 @@ export function defaultSettings(): Settings {
   };
 }
 
-export function simParams(settings: Settings): SimParams {
+/** `mode` is for a held key, which changes the force without changing the settings. */
+export function simParams(settings: Settings, mode = settings.cursor.mode): SimParams {
   return {
     ...settings.flock,
-    cursorStrength: Math.abs(settings.cursor.strength) * CURSOR_SIGN[settings.cursor.mode],
+    cursorStrength: Math.abs(settings.cursor.strength) * CURSOR_SIGN[mode],
   };
 }
 
 /** How far the cursor force reaches, in world units, or 0 when it is off. */
-export function cursorRadius(settings: Settings): number {
-  if (settings.cursor.mode === 'nothing' || settings.cursor.strength <= 0) return 0;
+export function cursorRadius(settings: Settings, mode = settings.cursor.mode): number {
+  if (mode === 'nothing' || settings.cursor.strength <= 0) return 0;
   return Math.max(0, settings.flock.cursorRadius);
 }
 

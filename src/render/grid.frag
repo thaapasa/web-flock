@@ -45,7 +45,21 @@ uniform float uOriginBoost;
  */
 uniform vec2 uCursorOffset;
 uniform float uCursorRadius;
-uniform float uCursorBoost;
+uniform vec3 uCursorColour;
+
+/**
+ * Rings that cross the disc the way the force moves boids: out from the cursor
+ * for a predator (direction 1), in from the rim for an attractor (-1). The
+ * phase is 0..1 through one crossing, advanced by the app at a rate set by the
+ * force's strength.
+ */
+uniform float uPulsePhase;
+uniform float uPulseDirection;
+uniform int uPulseCount;
+uniform float uPulseBrightness;
+
+/** At most this many pulses are drawn, whatever the style asks for. */
+const int MAX_PULSES = 4;
 
 out vec4 fragColour;
 
@@ -144,8 +158,22 @@ void main() {
 
   // Last, so the ring stays readable wherever it crosses a line or an axis.
   if (uCursorRadius > 0.0) {
-    float ring = ringCoverage(rel - uCursorOffset, uCursorRadius, uLineWidth);
-    colour = mix(colour, uLineColour * min(1.0, uBrightness * uCursorBoost), shade(ring));
+    vec2 d = rel - uCursorOffset;
+
+    // max, as with the bands, so two pulses that meet do not double up.
+    float pulse = 0.0;
+    for (int i = 0; i < MAX_PULSES; i++) {
+      if (i >= uPulseCount) break;
+      float t = fract(uPulsePhase + float(i) / float(uPulseCount));
+      float r = uCursorRadius * (uPulseDirection > 0.0 ? t : 1.0 - t);
+      // In quickly so a new pulse does not pop, out slowly so it dies as it arrives.
+      float envelope = smoothstep(0.0, 0.15, t) * (1.0 - t);
+      pulse = max(pulse, ringCoverage(d, r, uLineWidth) * envelope);
+    }
+    colour = mix(colour, uCursorColour * uPulseBrightness, shade(pulse));
+
+    float ring = ringCoverage(d, uCursorRadius, uLineWidth);
+    colour = mix(colour, uCursorColour, shade(ring));
   }
 
   fragColour = vec4(colour, 1.0);

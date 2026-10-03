@@ -35,7 +35,11 @@ const UNIFORM_NAMES = [
   'uOriginBoost',
   'uCursorOffset',
   'uCursorRadius',
-  'uCursorBoost',
+  'uCursorColour',
+  'uPulsePhase',
+  'uPulseDirection',
+  'uPulseCount',
+  'uPulseBrightness',
 ] as const;
 
 /**
@@ -52,6 +56,13 @@ export interface CursorRing {
   readonly y: number;
   /** World units. */
   readonly radius: number;
+  /** 1 when the force pushes boids away, -1 when it pulls them in. */
+  readonly direction: 1 | -1;
+  /**
+   * How far the pulses are through one crossing, 0..1. Advanced by the caller
+   * at `pulseRate`, so a change of strength changes the speed without a jump.
+   */
+  readonly phase: number;
 }
 
 export interface GridRenderer {
@@ -149,7 +160,14 @@ export function createGridRenderer(gl: WebGL2RenderingContext): GridRenderer {
         cursor ? (cursor.y - camera.center.y) * devicePixelsPerUnit : 0,
       );
       gl.uniform1f(uniforms.uCursorRadius, radius);
-      gl.uniform1f(uniforms.uCursorBoost, style.cursorBoost);
+      if (cursor) {
+        const repel = cursor.direction > 0;
+        gl.uniform3fv(uniforms.uCursorColour, repel ? style.repelColour : style.attractColour);
+        gl.uniform1f(uniforms.uPulsePhase, cursor.phase);
+        gl.uniform1f(uniforms.uPulseDirection, cursor.direction);
+        gl.uniform1i(uniforms.uPulseCount, style.pulseCount);
+        gl.uniform1f(uniforms.uPulseBrightness, style.pulseBrightness);
+      }
 
       draw(gl, vao, gl.TRIANGLES, 3);
     },
