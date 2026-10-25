@@ -5,7 +5,13 @@ export default defineConfig({
     // Bound to all interfaces so the dev server is reachable when Vite runs
     // inside the sandbox VM rather than on the host.
     host: true,
-    port: 5173,
+    port: 12510,
+    strictPort: true,
+  },
+  preview: {
+    host: true,
+    port: 12511,
+    strictPort: true,
   },
   build: {
     target: 'es2022',

@@ -10,13 +10,13 @@ You need Node 24 and yarn 4.
 
 ```sh
 yarn install
-yarn dev          # http://localhost:5173
+yarn dev          # http://localhost:12510
 ```
 
 Other commands:
 
 - `yarn check` runs the type check, the linter, the format check and the tests.
-- `yarn build` builds the app into `dist/`.
+- `yarn build` builds the app into `dist/`, and `yarn preview` serves it at http://localhost:12511.
 - `yarn site` rebuilds `site/`.
 
 `site/` is a built copy of the page, kept in the repository. The host serves the directory exactly
